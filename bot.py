@@ -1,3 +1,4 @@
+# =====================================v.5 code เดิม v.1=====================
 from telegram import ( 
     Update,
     InlineKeyboardButton,
@@ -15,6 +16,7 @@ from telegram.ext import (
     ContextTypes
 )
 
+import os
 import pandas as pd
 import numpy as np
 import yfinance as yf
