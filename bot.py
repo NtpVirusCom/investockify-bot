@@ -1,4 +1,4 @@
-from telegram import (  #v.5 code เดิม คือ v.1
+from telegram import ( 
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
