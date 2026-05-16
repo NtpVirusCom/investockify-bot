@@ -61,14 +61,23 @@ class ChartGenerator:
         ema50 = self.calculate_ema(close, 50)
         ema200 = self.calculate_ema(close, 200)
 
-        # ค่า EMA ล่าสุด
+        # à¸à¹à¸² EMA à¸¥à¹à¸²à¸ªà¸¸à¸
         ema20_last = ema20.iloc[-1]
         ema50_last = ema50.iloc[-1]
         ema200_last = ema200.iloc[-1]
 
         current_price = close.iloc[-1]
 
-        # === กำหนด Entry, SL, TP ===
+        # === à¹à¸ªà¸à¸à¸à¸£à¸²à¸à¹à¸à¸à¸²à¸° 3 à¹à¸à¸·à¸­à¸à¸¥à¹à¸²à¸ªà¸¸à¸ (90 à¸§à¸±à¸) à¹à¸à¹à¸à¸³à¸à¸§à¸à¸à¸²à¸à¸à¹à¸­à¸¡à¸¹à¸¥ 3 à¸à¸µ ===
+        df_display = df.tail(90).copy()
+        ema20_display = ema20.tail(90)
+        ema50_display = ema50.tail(90)
+        ema200_display = ema200.tail(90)
+
+        # à¹à¸à¹ df_display à¹à¸à¸ df à¹à¸à¸à¸²à¸£ plot à¸à¸£à¸²à¸
+        df = df_display
+
+        # === à¸à¸³à¸«à¸à¸ Entry, SL, TP ===
         if use_smart_entry and entry_price is None:
             entry_price, entry_date, auto_sl, method = self.find_optimal_entry(df, ema200)
 
@@ -110,7 +119,7 @@ class ChartGenerator:
         entry_zone_top = entry_price * 1.009
         entry_zone_bottom = entry_price * 0.991
 
-        # === สร้างกราฟ ===
+        # === à¸ªà¸£à¹à¸²à¸à¸à¸£à¸²à¸ ===
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10),
                                        gridspec_kw={'height_ratios': [4, 1]},
                                        sharex=True)
@@ -140,9 +149,9 @@ class ChartGenerator:
 
         # --- EMA Lines ---
         x_range = range(len(df))
-        ax1.plot(x_range, ema20, color=COLORS['ema20'], linewidth=2, label='EMA 20', alpha=0.8)
-        ax1.plot(x_range, ema50, color=COLORS['ema50'], linewidth=2, label='EMA 50', alpha=0.8)
-        ax1.plot(x_range, ema200, color=COLORS['ema200'], linewidth=2, label='EMA 200', alpha=0.8)
+        ax1.plot(x_range, ema20_display.values, color=COLORS['ema20'], linewidth=2, label='EMA 20', alpha=0.8)
+        ax1.plot(x_range, ema50_display.values, color=COLORS['ema50'], linewidth=2, label='EMA 50', alpha=0.8)
+        ax1.plot(x_range, ema200_display.values, color=COLORS['ema200'], linewidth=2, label='EMA 200', alpha=0.8)
 
         # --- Horizontal Lines (TP/SL/Entry) ---
         ax1.axhline(y=tp2_price, color=COLORS['tp2'], linestyle='-', linewidth=2, alpha=0.9)
@@ -155,19 +164,19 @@ class ChartGenerator:
 
         change_pct = ((current_price - entry_price) / entry_price) * 100
 
-        # === กำหนดขอบเขตแกน Y ก่อนวาง Label ===
+        # === à¸à¸³à¸«à¸à¸à¸à¸­à¸à¹à¸à¸à¹à¸à¸ Y à¸à¹à¸­à¸à¸§à¸²à¸ Label ===
         price_min = min(df['Low'].min(), sl_price * 0.95)
         price_max = max(df['High'].max(), tp2_price * 1.05)
         ax1.set_ylim(price_min, price_max)
         ax1.set_xlim(-1, len(df))
 
-        # === คำนวณ y_shift หลังกำหนด ylim ===
+        # === à¸à¸³à¸à¸§à¸ y_shift à¸«à¸¥à¸±à¸à¸à¸³à¸«à¸à¸ ylim ===
         y_range = price_max - price_min
         y_shift = y_range * 0.008
         x_offset = len(df) * 0.02
 
         # ============================================================
-        # LABELS - วางให้ตรงระดับเส้น (เหมือน Apexify)
+        # LABELS - à¸§à¸²à¸à¹à¸«à¹à¸à¸£à¸à¸£à¸°à¸à¸±à¸à¹à¸ªà¹à¸ (à¹à¸«à¸¡à¸·à¸­à¸ Apexify)
         # ============================================================
 
         # TP2 Label
@@ -211,12 +220,12 @@ class ChartGenerator:
                          edgecolor='white', alpha=0.9), color='white')
 
         # ============================================================
-        # EMA VALUE LABELS - แสดงค่า EMA ล่าสุดที่ด้านขวาของกราฟ
+        # EMA VALUE LABELS - à¹à¸ªà¸à¸à¸à¹à¸² EMA à¸¥à¹à¸²à¸ªà¸¸à¸à¸à¸µà¹à¸à¹à¸²à¸à¸à¸§à¸²à¸à¸­à¸à¸à¸£à¸²à¸
         # ============================================================
-        x_right = len(df) * 0.98  # ด้านขวา 98%
+        x_right = len(df) * 0.98  # à¸à¹à¸²à¸à¸à¸§à¸² 98%
 
         # EMA 20 Label
-        ax1.text(x_right, ema20_last + y_shift,
+        ax1.text(x_right, ema20_display.iloc[-1] + y_shift,
                 f"EMA20 {ema20_last:,.2f}",
                 fontsize=9, fontweight='bold', va='bottom', ha='right',
                 color=COLORS['ema20'],
@@ -224,7 +233,7 @@ class ChartGenerator:
                          edgecolor=COLORS['ema20'], alpha=0.9))
 
         # EMA 50 Label
-        ax1.text(x_right, ema50_last + y_shift,
+        ax1.text(x_right, ema50_display.iloc[-1] + y_shift,
                 f"EMA50 {ema50_last:,.2f}",
                 fontsize=9, fontweight='bold', va='bottom', ha='right',
                 color=COLORS['ema50'],
@@ -232,7 +241,7 @@ class ChartGenerator:
                          edgecolor=COLORS['ema50'], alpha=0.9))
 
         # EMA 200 Label
-        ax1.text(x_right, ema200_last + y_shift,
+        ax1.text(x_right, ema200_display.iloc[-1] + y_shift,
                 f"EMA200 {ema200_last:,.2f}",
                 fontsize=9, fontweight='bold', va='bottom', ha='right',
                 color=COLORS['ema200'],
