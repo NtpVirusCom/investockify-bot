@@ -8,7 +8,7 @@ from telegram.ext import (
 )
 from data_fetcher import DataFetcher
 from chart_generator import ChartGenerator
-from config import TELEGRAM_BOT_TOKEN, DEFAULT_TP1_PCT, DEFAULT_TP2_PCT, DEFAULT_SL_PCT
+from config import TELEGRAM_TOKEN, DEFAULT_TP1_PCT, DEFAULT_TP2_PCT, DEFAULT_SL_PCT
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -404,7 +404,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 def main():
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
 
     chart_conv = ConversationHandler(
         entry_points=[CommandHandler('chart', chart_command)],
