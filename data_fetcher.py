@@ -6,7 +6,7 @@ class DataFetcher:
     def __init__(self):
         pass
     
-    def get_stock_data(self, symbol: str, period: str = "3mo", interval: str = "1d"):
+    def get_stock_data(self, symbol: str, period: str = "3y", interval: str = "1d"):
         """
         ดึงข้อมูลราคาหุ้น/สินค้าโภคภัณฑ์
         รองรับ: AAPL, GC=F (ทอง), SI=F (เงิน), CL=F (น้ำมัน), ฯลฯ
