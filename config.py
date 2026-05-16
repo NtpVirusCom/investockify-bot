@@ -6,10 +6,8 @@ load_dotenv()
 # ==========================================
 # TELEGRAM TOKEN (Railway Environment Variable)
 # ==========================================
-#TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-#TELEGRAM_TOKEN = "7732232153:AAEaIP5zpcR90YxKXMX_03uYNlui-tIgl68"
-#TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_BOT_TOKEN = "7732232153:AAEaIP5zpcR90YxKXMX_03uYNlui-tIgl68"
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+
 DEFAULT_TIMEFRAME = "2y"
 DEFAULT_INTERVAL = "1d"
 
