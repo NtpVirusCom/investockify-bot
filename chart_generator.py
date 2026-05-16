@@ -13,27 +13,65 @@ class ChartGenerator:
         return data.ewm(span=period, adjust=False).mean()
 
     def find_optimal_entry(self, df: pd.DataFrame, ema200: pd.Series):
-        recent_df = df.tail(30)
+        """
+        หา Swing Low ที่เหมาะสมที่สุดใกล้ EMA200
+        - ค้นหาในช่วง 90 วันล่าสุด (3 เดือน)
+        - Swing Low ต้องอยู่ใกล้ EMA200 ณ วันนั้น (ไม่ใช่แค่ EMA200 ล่าสุด)
+        - ถ้าไม่มี Swing Low ที่เหมาะสม ใช้ recent low แทน
+        """
+        recent_df = df.tail(90)
         lows = recent_df['Low'].values
         swing_lows = []
+
+        # ค่า EMA200 ล่าสุดสำหรับ reference
+        ema200_current = ema200.iloc[-1]
 
         for i in range(1, len(lows) - 1):
             if lows[i] < lows[i-1] and lows[i] < lows[i+1]:
                 idx = recent_df.index[i]
-                ema_val = ema200.loc[idx] if idx in ema200.index else ema200.iloc[-1]
+                # ใช้ EMA200 ณ วันนั้นจริงๆ
+                ema_val = ema200.loc[idx] if idx in ema200.index else ema200_current
+
+                # คำนวณระยะห่างจาก EMA200 ณ วันนั้น (เป็น %)
+                ema200_dist = abs(lows[i] - ema_val) / ema_val * 100
+
+                # คำนวณระยะห่างจาก EMA200 ปัจจุบัน (เป็น %)
+                current_dist = abs(lows[i] - ema200_current) / ema200_current * 100
+
                 swing_lows.append({
                     'price': lows[i],
                     'date': idx,
-                    'ema200_dist': abs(lows[i] - ema_val) / ema_val * 100
+                    'ema200_dist': ema200_dist,      # ระยะห่างจาก EMA200 ณ วันนั้น
+                    'current_dist': current_dist,    # ระยะห่างจาก EMA200 ปัจจุบัน
+                    'ema_val': ema_val               # ค่า EMA200 ณ วันนั้น
                 })
 
         if swing_lows:
-            best = min(swing_lows, key=lambda x: x['ema200_dist'])
-            entry_price = best['price']
-            atr = self.calculate_atr(df).iloc[-1]
-            sl_price = entry_price - (atr * 2.5)
-            return entry_price, best['date'], sl_price, "swing_low"
+            # เรียงลำดับตามระยะห่างจาก EMA200 ปัจจุบัน (ให้ Swing Low อยู่ใกล้ EMA200 ปัจจุบัน)
+            # แต่ต้องไม่เกิน 5% จาก EMA200 ณ วันนั้น
+            valid_swing_lows = [s for s in swing_lows if s['ema200_dist'] <= 5.0]
 
+            if valid_swing_lows:
+                # เลือก Swing Low ที่ใกล้ EMA200 ปัจจุบันมากที่สุด
+                best = min(valid_swing_lows, key=lambda x: x['current_dist'])
+                entry_price = best['price']
+
+                # SL = ต่ำกว่า Swing Low ที่เลือก (ใช้ ATR หรือ fixed %)
+                atr = self.calculate_atr(df).iloc[-1]
+                sl_buffer = max(atr * 1.5, entry_price * 0.015)  # อย่างน้อย 1.5% หรือ 1.5x ATR
+                sl_price = entry_price - sl_buffer
+
+                return entry_price, best['date'], sl_price, "swing_low"
+            else:
+                # ถ้าไม่มี Swing Low ที่ valid ใช้ Swing Low ที่ใกล้ EMA200 ณ วันนั้นมากที่สุด
+                best = min(swing_lows, key=lambda x: x['ema200_dist'])
+                entry_price = best['price']
+                atr = self.calculate_atr(df).iloc[-1]
+                sl_buffer = max(atr * 1.5, entry_price * 0.015)
+                sl_price = entry_price - sl_buffer
+                return entry_price, best['date'], sl_price, "swing_low"
+
+        # Fallback: ใช้ recent low ถ้าไม่มี Swing Low
         entry_price = df['Low'].tail(20).min()
         entry_date = df['Low'].tail(20).idxmin()
         sl_price = entry_price * (1 + DEFAULT_SL_PCT / 100)
@@ -61,23 +99,23 @@ class ChartGenerator:
         ema50 = self.calculate_ema(close, 50)
         ema200 = self.calculate_ema(close, 200)
 
-        # à¸à¹à¸² EMA à¸¥à¹à¸²à¸ªà¸¸à¸
+        # ค่า EMA ล่าสุด
         ema20_last = ema20.iloc[-1]
         ema50_last = ema50.iloc[-1]
         ema200_last = ema200.iloc[-1]
 
         current_price = close.iloc[-1]
 
-        # === à¹à¸ªà¸à¸à¸à¸£à¸²à¸à¹à¸à¸à¸²à¸° 3 à¹à¸à¸·à¸­à¸à¸¥à¹à¸²à¸ªà¸¸à¸ (90 à¸§à¸±à¸) à¹à¸à¹à¸à¸³à¸à¸§à¸à¸à¸²à¸à¸à¹à¸­à¸¡à¸¹à¸¥ 3 à¸à¸µ ===
+        # === แสดงกราฟเฉพาะ 3 เดือนล่าสุด (90 วัน) แต่คำนวณจากข้อมูล 3 ปี ===
         df_display = df.tail(60).copy()
         ema20_display = ema20.tail(60)
         ema50_display = ema50.tail(60)
         ema200_display = ema200.tail(60)
 
-        # à¹à¸à¹ df_display à¹à¸à¸ df à¹à¸à¸à¸²à¸£ plot à¸à¸£à¸²à¸
+        # ใช้ df_display แทน df ในการ plot กราฟ
         df = df_display
 
-        # === à¸à¸³à¸«à¸à¸ Entry, SL, TP ===
+        # === กำหนด Entry, SL, TP ===
         if use_smart_entry and entry_price is None:
             entry_price, entry_date, auto_sl, method = self.find_optimal_entry(df, ema200)
 
@@ -116,10 +154,11 @@ class ChartGenerator:
         tp1_pct_display = ((tp1_price - entry_price) / entry_price) * 100
         tp2_pct_display = ((tp2_price - entry_price) / entry_price) * 100
 
+        # Entry Zone: กว้าง ±0.9% (เหมือนเดิม)
         entry_zone_top = entry_price * 1.009
         entry_zone_bottom = entry_price * 0.991
 
-        # === à¸ªà¸£à¹à¸²à¸à¸à¸£à¸²à¸ ===
+        # === สร้างกราฟ ===
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10),
                                        gridspec_kw={'height_ratios': [4, 1]},
                                        sharex=True)
@@ -164,19 +203,19 @@ class ChartGenerator:
 
         change_pct = ((current_price - entry_price) / entry_price) * 100
 
-        # === à¸à¸³à¸«à¸à¸à¸à¸­à¸à¹à¸à¸à¹à¸à¸ Y à¸à¹à¸­à¸à¸§à¸²à¸ Label ===
+        # === กำหนดขอบเขตแกน Y ก่อนวาง Label ===
         price_min = min(df['Low'].min(), sl_price * 0.95)
         price_max = max(df['High'].max(), tp2_price * 1.05)
         ax1.set_ylim(price_min, price_max)
         ax1.set_xlim(-1, len(df))
 
-        # === à¸à¸³à¸à¸§à¸ y_shift à¸«à¸¥à¸±à¸à¸à¸³à¸«à¸à¸ ylim ===
+        # === คำนวณ y_shift หลังกำหนด ylim ===
         y_range = price_max - price_min
         y_shift = y_range * 0.008
         x_offset = len(df) * 0.02
 
         # ============================================================
-        # LABELS - à¸§à¸²à¸à¹à¸«à¹à¸à¸£à¸à¸£à¸°à¸à¸±à¸à¹à¸ªà¹à¸ (à¹à¸«à¸¡à¸·à¸­à¸ Apexify)
+        # LABELS - วางให้ตรงระดับเส้น (เหมือน Apexify)
         # ============================================================
 
         # TP2 Label
@@ -220,9 +259,9 @@ class ChartGenerator:
                          edgecolor='white', alpha=0.9), color='white')
 
         # ============================================================
-        # EMA VALUE LABELS - à¹à¸ªà¸à¸à¸à¹à¸² EMA à¸¥à¹à¸²à¸ªà¸¸à¸à¸à¸µà¹à¸à¹à¸²à¸à¸à¸§à¸²à¸à¸­à¸à¸à¸£à¸²à¸
+        # EMA VALUE LABELS - แสดงค่า EMA ล่าสุดที่ด้านขวาของกราฟ
         # ============================================================
-        x_right = len(df) * 0.98  # à¸à¹à¸²à¸à¸à¸§à¸² 98%
+        x_right = len(df) * 0.98  # ด้านขวา 98%
 
         # EMA 20 Label
         ax1.text(x_right, ema20_display.iloc[-1] + y_shift,
@@ -254,7 +293,7 @@ class ChartGenerator:
         ax1.yaxis.tick_right()
         ax1.yaxis.set_label_position("right")
 
-        ax1.set_title(f'Apexify \u2014 {symbol}  |  Entry Zone + TP + SL Plan\n'
+        ax1.set_title(f'Apexify — {symbol}  |  Entry Zone + TP + SL Plan\n'
                      f'EMA: 20(Blue) 50(Orange) 200(Purple)',
                      fontsize=14, fontweight='bold', pad=20)
 
