@@ -13,29 +13,22 @@ class ChartGenerator:
         return data.ewm(span=period, adjust=False).mean()
 
     def find_support_resistance(self, df: pd.DataFrame, window: int = 10):
-        """
-        หาแนวรับและแนวต้านจาก Pivot Points
-        """
+        """หาแนวรับและแนวต้านจาก Pivot Points"""
         highs = df['High'].rolling(window=window, center=True).max()
         lows = df['Low'].rolling(window=window, center=True).min()
 
-        # แนวรับ = จุดต่ำสุดที่เกิดขึ้นหลายครั้ง
-        # แนวต้าน = จุดสูงสุดที่เกิดขึ้นหลายครั้ง
-        support = lows.quantile(0.25)  # 25th percentile of lows
-        resistance = highs.quantile(0.75)  # 75th percentile of highs
+        support = lows.quantile(0.25)
+        resistance = highs.quantile(0.75)
 
         return support, resistance
 
-    def find_poc(self, df: pd.DataFrame, bins: int = 50):
-        """
-        หา POC (Point of Control) = ราคาที่มี Volume สูงสุด
-        """
+    def find_poc(self, df: pd.DataFrame):
+        """หา POC (Point of Control) = ราคาที่มี Volume สูงสุด"""
         price_volume = []
         for idx, row in df.iterrows():
             mid_price = (row['High'] + row['Low']) / 2
             price_volume.append((mid_price, row['Volume']))
 
-        # คำนวณ weighted average price by volume
         total_vol = sum(v for p, v in price_volume)
         if total_vol > 0:
             poc = sum(p * v for p, v in price_volume) / total_vol
@@ -46,29 +39,14 @@ class ChartGenerator:
 
     def find_optimal_entry(self, df: pd.DataFrame, ema200: pd.Series, current_price: float):
         """
-        Apexify TRUE Logic (จาก Report จริง):
-
-        Entry Zone:
-        - ใช้แนวรับ (Support) เป็น baseline
-        - ปรับลงมาเล็กน้อย (-1-2%)
-        - ไม่ใช่ Swing Low เก่า แต่เป็น "โซนที่น่าซื้อถ้าย่อ"
-
-        SL:
-        - ต่ำกว่า POC (Point of Control)
-        - หรือต่ำกว่า Swing Low ที่แท้จริงในช่วง 4-6 สัปดาห์
-
-        TP1:
-        - แนวต้านที่มีอยู่จริง (Resistance)
-        - ไม่ใช่คำนวณจาก Risk:Reward
-
-        TP2:
-        - แนวต้านถัดไป หรือ +10-15% จาก Entry
+        Apexify TRUE Logic:
+        - Entry = แนวรับที่ปรับลงมาเล็กน้อย
+        - SL = ต่ำกว่า POC หรือ Swing Low ที่แท้จริง
+        - TP1 = แนวต้านที่มีอยู่จริง
+        - TP2 = แนวต้านถัดไปหรือ +6% จาก TP1
         """
 
-        # หาแนวรับและแนวต้าน
         support, resistance = self.find_support_resistance(df.tail(60))
-
-        # หา POC
         poc = self.find_poc(df.tail(60))
 
         # หา Swing Low ที่แท้จริงในช่วง 4-6 สัปดาห์
@@ -80,7 +58,7 @@ class ChartGenerator:
             if lows[i] < lows[i-1] and lows[i] < lows[i+1]:
                 swing_lows.append(lows[i])
 
-        # SL = ต่ำกว่า POC หรือ Swing Low ที่แท้จริง (เลือกอันที่สูงกว่า)
+        # SL = ต่ำกว่า POC หรือ Swing Low ที่แท้จริง
         if swing_lows:
             true_swing_low = min(swing_lows)
             sl_price = max(poc * 0.995, true_swing_low * 0.99)
@@ -129,7 +107,7 @@ class ChartGenerator:
 
         current_price = close.iloc[-1]
 
-        # Apexify: แสดงกราฟ 3 เดือน (90 วัน)
+        # แสดงกราฟ 3 เดือน (90 วัน)
         df_display = df.tail(60).copy()
         ema20_display = ema20.tail(60)
         ema50_display = ema50.tail(60)
@@ -137,20 +115,18 @@ class ChartGenerator:
 
         df = df_display
 
-        # === กำหนด Entry, SL, TP ตาม Apexify ===
+        # กำหนด Entry, SL, TP
         if use_smart_entry and entry_price is None:
             entry_price, entry_date, auto_sl, support, resistance, poc = self.find_optimal_entry(df, ema200, current_price)
 
             if sl_price is None:
                 sl_price = auto_sl
 
-            # TP1 = แนวต้าน (Resistance)
             if tp1_price is None:
                 tp1_price = resistance
 
-            # TP2 = แนวต้านถัดไป หรือ +10-15% จาก Entry
             if tp2_price is None:
-                tp2_price = tp1_price * 1.06  # +6% จาก TP1
+                tp2_price = tp1_price * 1.06
         else:
             if entry_price is None:
                 entry_price = current_price
@@ -169,16 +145,15 @@ class ChartGenerator:
         tp1_pct_display = ((tp1_price - entry_price) / entry_price) * 100
         tp2_pct_display = ((tp2_price - entry_price) / entry_price) * 100
 
-        # Entry Zone
         entry_zone_top = entry_price * 1.009
         entry_zone_bottom = entry_price * 0.991
 
-        # === สร้างกราฟ ===
+        # สร้างกราฟ
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10),
                                        gridspec_kw={'height_ratios': [4, 1]},
                                        sharex=True)
 
-        # --- Candlestick ---
+        # Candlestick
         for i, (idx, row) in enumerate(df.iterrows()):
             x = i
             open_p = row['Open']
@@ -201,13 +176,13 @@ class ChartGenerator:
 
             ax1.plot([x, x], [low_p, high_p], color=color, linewidth=1)
 
-        # --- EMA Lines ---
+        # EMA Lines
         x_range = range(len(df))
         ax1.plot(x_range, ema20_display.values, color=COLORS['ema20'], linewidth=2, label='EMA 20', alpha=0.8)
         ax1.plot(x_range, ema50_display.values, color=COLORS['ema50'], linewidth=2, label='EMA 50', alpha=0.8)
         ax1.plot(x_range, ema200_display.values, color=COLORS['ema200'], linewidth=2, label='EMA 200', alpha=0.8)
 
-        # --- Horizontal Lines ---
+        # Horizontal Lines
         ax1.axhline(y=tp2_price, color=COLORS['tp2'], linestyle='-', linewidth=2, alpha=0.9)
         ax1.axhline(y=tp1_price, color=COLORS['tp1'], linestyle='--', linewidth=1.5, alpha=0.9)
         ax1.axhline(y=entry_price, color=COLORS['entry'], linestyle='dotted', linewidth=1.5, alpha=0.9)
