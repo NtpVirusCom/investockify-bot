@@ -8,3 +8,4 @@ openai==2.15.0
 matplotlib==3.6.2
 numpy==1.26.4
 requests==2.31
+chartgenerator==0.1a19
