@@ -12,111 +12,95 @@ class ChartGenerator:
     def calculate_ema(self, data: pd.Series, period: int):
         return data.ewm(span=period, adjust=False).mean()
 
+    def find_support_resistance(self, df: pd.DataFrame, window: int = 10):
+        """
+        หาแนวรับและแนวต้านจาก Pivot Points
+        """
+        highs = df['High'].rolling(window=window, center=True).max()
+        lows = df['Low'].rolling(window=window, center=True).min()
+
+        # แนวรับ = จุดต่ำสุดที่เกิดขึ้นหลายครั้ง
+        # แนวต้าน = จุดสูงสุดที่เกิดขึ้นหลายครั้ง
+        support = lows.quantile(0.25)  # 25th percentile of lows
+        resistance = highs.quantile(0.75)  # 75th percentile of highs
+
+        return support, resistance
+
+    def find_poc(self, df: pd.DataFrame, bins: int = 50):
+        """
+        หา POC (Point of Control) = ราคาที่มี Volume สูงสุด
+        """
+        price_volume = []
+        for idx, row in df.iterrows():
+            mid_price = (row['High'] + row['Low']) / 2
+            price_volume.append((mid_price, row['Volume']))
+
+        # คำนวณ weighted average price by volume
+        total_vol = sum(v for p, v in price_volume)
+        if total_vol > 0:
+            poc = sum(p * v for p, v in price_volume) / total_vol
+        else:
+            poc = df['Close'].mean()
+
+        return poc
+
     def find_optimal_entry(self, df: pd.DataFrame, ema200: pd.Series, current_price: float):
         """
-        Apexify Swing Trading Logic (1-4 weeks timeframe):
-        - หา Swing Low ในกรอบ 4-6 สัปดาห์ล่าสุด (20-30 วัน)
-        - Swing Low ต้องอยู่ใกล้ EMA200 (<= 2-3%)
-        - ต้องเป็น Bounce จริง (Close วันถัดไป > Low)
-        - Risk:Reward ขั้นต่ำ 1:2
-        - ถ้าไม่มี Swing Low ที่ valid ในกรอบ ใช้ EMA50 แทน
+        Apexify TRUE Logic (จาก Report จริง):
+
+        Entry Zone:
+        - ใช้แนวรับ (Support) เป็น baseline
+        - ปรับลงมาเล็กน้อย (-1-2%)
+        - ไม่ใช่ Swing Low เก่า แต่เป็น "โซนที่น่าซื้อถ้าย่อ"
+
+        SL:
+        - ต่ำกว่า POC (Point of Control)
+        - หรือต่ำกว่า Swing Low ที่แท้จริงในช่วง 4-6 สัปดาห์
+
+        TP1:
+        - แนวต้านที่มีอยู่จริง (Resistance)
+        - ไม่ใช่คำนวณจาก Risk:Reward
+
+        TP2:
+        - แนวต้านถัดไป หรือ +10-15% จาก Entry
         """
-        # Apexify: ใช้ข้อมูล 4-6 สัปดาห์ล่าสุด (20-30 วัน) สำหรับหา Swing Low
-        swing_lookback = 25  # ~4-5 สัปดาห์
-        recent_df = df.tail(swing_lookback).reset_index()
 
-        if len(recent_df) < 5:
-            # ถ้าข้อมูลน้อยเกินไป ใช้ EMA50
-            ema50 = self.calculate_ema(df['Close'], 50)
-            entry_price = ema50.iloc[-1]
-            entry_date = df.index[-1]
-            sl_price = entry_price * (1 + DEFAULT_SL_PCT / 100)
-            return entry_price, entry_date, sl_price, "ema50_fallback"
+        # หาแนวรับและแนวต้าน
+        support, resistance = self.find_support_resistance(df.tail(60))
 
-        lows = recent_df['Low'].values
-        highs = recent_df['High'].values
-        closes = recent_df['Close'].values
+        # หา POC
+        poc = self.find_poc(df.tail(60))
+
+        # หา Swing Low ที่แท้จริงในช่วง 4-6 สัปดาห์
+        recent_df = df.tail(30)
         swing_lows = []
-
-        ema200_current = ema200.iloc[-1]
+        lows = recent_df['Low'].values
 
         for i in range(1, len(lows) - 1):
             if lows[i] < lows[i-1] and lows[i] < lows[i+1]:
-                idx = recent_df.index[i]
-                original_idx = recent_df.iloc[i]['Date'] if 'Date' in recent_df.columns else recent_df.index[i]
+                swing_lows.append(lows[i])
 
-                # EMA200 ณ วันนั้น
-                ema_val = ema200.loc[original_idx] if original_idx in ema200.index else ema200_current
-
-                # ระยะห่างจาก EMA200 ณ วันนั้น (%)
-                ema200_dist = abs(lows[i] - ema_val) / ema_val * 100
-
-                # ตรวจสอบ Bounce (Close วันถัดไป > Low วันนั้น)
-                is_bounce = closes[i+1] > lows[i] if i+1 < len(closes) else False
-
-                # ระยะห่างจากราคาปัจจุบัน
-                dist_from_current = abs(lows[i] - current_price) / current_price * 100
-
-                # Apexify: คำนวณ Risk:Reward ที่เป็นไปได้
-                atr = self.calculate_atr(df).iloc[-1]
-                sl_buffer = max(atr * 1.5, lows[i] * 0.015)
-                potential_sl = lows[i] - sl_buffer
-                risk = lows[i] - potential_sl
-                potential_reward = current_price - lows[i]
-                rr_ratio = potential_reward / risk if risk > 0 else 0
-
-                swing_lows.append({
-                    'price': lows[i],
-                    'date': original_idx,
-                    'ema200_dist': ema200_dist,
-                    'ema_val': ema_val,
-                    'is_bounce': is_bounce,
-                    'dist_from_current': dist_from_current,
-                    'rr_ratio': rr_ratio,
-                    'score': ema200_dist + (0 if is_bounce else 15) + (10 if rr_ratio < 2 else 0)
-                })
-
+        # SL = ต่ำกว่า POC หรือ Swing Low ที่แท้จริง (เลือกอันที่สูงกว่า)
         if swing_lows:
-            # Apexify Criteria:
-            # 1. ใกล้ EMA200 <= 3%
-            # 2. เป็น Bounce จริง
-            # 3. Risk:Reward >= 1:2 (ถ้าซื้อที่ Swing Low แล้วขายที่ราคาปัจจุบัน)
-            valid_swing_lows = [
-                s for s in swing_lows 
-                if s['ema200_dist'] <= 3.0 
-                and s['is_bounce']
-                and s['rr_ratio'] >= 2.0
-            ]
+            true_swing_low = min(swing_lows)
+            sl_price = max(poc * 0.995, true_swing_low * 0.99)
+        else:
+            sl_price = poc * 0.99
 
-            if valid_swing_lows:
-                # เลือก Swing Low ที่มี score ต่ำสุด
-                best = min(valid_swing_lows, key=lambda x: x['score'])
-                entry_price = best['price']
+        # Entry = แนวรับที่ปรับลงมาเล็กน้อย
+        entry_price = support * 0.99
 
-                # SL = ต่ำกว่า Swing Low
-                atr = self.calculate_atr(df).iloc[-1]
-                sl_buffer = max(atr * 1.5, entry_price * 0.015)
-                sl_price = entry_price - sl_buffer
+        # ถ้า Entry สูงกว่าราคาปัจจุบัน ปรับให้ต่ำกว่า
+        if entry_price >= current_price:
+            entry_price = current_price * 0.96
 
-                return entry_price, best['date'], sl_price, "apexify_swing"
-            else:
-                # ผ่อนเกณฑ์: ไม่ตรวจสอบ RR แต่ต้อง Bounce + ใกล้ EMA200
-                relaxed = [s for s in swing_lows if s['ema200_dist'] <= 5.0 and s['is_bounce']]
-                if relaxed:
-                    best = min(relaxed, key=lambda x: x['ema200_dist'])
-                    entry_price = best['price']
-                    atr = self.calculate_atr(df).iloc[-1]
-                    sl_buffer = max(atr * 1.5, entry_price * 0.015)
-                    sl_price = entry_price - sl_buffer
-                    return entry_price, best['date'], sl_price, "swing_relaxed"
+        # ถ้า Entry ต่ำกว่า SL มากเกินไป ปรับให้เหมาะสม
+        if entry_price < sl_price * 1.05:
+            entry_price = sl_price * 1.05
 
-        # Apexify Fallback: ใช้ EMA50 ถ้าไม่มี Swing Low ที่ valid
-        ema50 = self.calculate_ema(df['Close'], 50)
-        entry_price = ema50.iloc[-1]
         entry_date = df.index[-1]
-        sl_price = entry_price * (1 + DEFAULT_SL_PCT / 100)
 
-        return entry_price, entry_date, sl_price, "ema50_fallback"
+        return entry_price, entry_date, sl_price, support, resistance, poc
 
     def calculate_atr(self, df: pd.DataFrame, period: int = 14):
         high_low = df['High'] - df['Low']
@@ -129,8 +113,8 @@ class ChartGenerator:
 
     def generate_trading_chart(self, df: pd.DataFrame, symbol: str,
                               entry_price: float = None,
-                              tp1_pct: float = None,
-                              tp2_pct: float = None,
+                              tp1_price: float = None,
+                              tp2_price: float = None,
                               sl_price: float = None,
                               use_smart_entry: bool = True):
 
@@ -145,7 +129,7 @@ class ChartGenerator:
 
         current_price = close.iloc[-1]
 
-        # Apexify: แสดงกราฟ 3 เดือน (90 วัน) แต่ดึงข้อมูล 6 เดือน - 1 ปี
+        # Apexify: แสดงกราฟ 3 เดือน (90 วัน)
         df_display = df.tail(60).copy()
         ema20_display = ema20.tail(60)
         ema50_display = ema50.tail(60)
@@ -153,32 +137,20 @@ class ChartGenerator:
 
         df = df_display
 
-        # === กำหนด Entry, SL, TP ===
+        # === กำหนด Entry, SL, TP ตาม Apexify ===
         if use_smart_entry and entry_price is None:
-            entry_price, entry_date, auto_sl, method = self.find_optimal_entry(df, ema200, current_price)
+            entry_price, entry_date, auto_sl, support, resistance, poc = self.find_optimal_entry(df, ema200, current_price)
 
             if sl_price is None:
                 sl_price = auto_sl
 
-            risk = entry_price - sl_price
-            if risk > 0:
-                # Apexify: TP จาก Risk:Reward (1:2 และ 1:4)
-                if tp1_pct is None:
-                    tp1_price = entry_price + (risk * 2)
-                    tp1_pct = ((tp1_price - entry_price) / entry_price) * 100
-                else:
-                    tp1_price = entry_price * (1 + tp1_pct / 100)
+            # TP1 = แนวต้าน (Resistance)
+            if tp1_price is None:
+                tp1_price = resistance
 
-                if tp2_pct is None:
-                    tp2_price = entry_price + (risk * 4)
-                    tp2_pct = ((tp2_price - entry_price) / entry_price) * 100
-                else:
-                    tp2_price = entry_price * (1 + tp2_pct / 100)
-            else:
-                tp1_price = entry_price * 1.05
-                tp2_price = entry_price * 1.10
-                tp1_pct = 5.0
-                tp2_pct = 10.0
+            # TP2 = แนวต้านถัดไป หรือ +10-15% จาก Entry
+            if tp2_price is None:
+                tp2_price = tp1_price * 1.06  # +6% จาก TP1
         else:
             if entry_price is None:
                 entry_price = current_price
@@ -186,26 +158,20 @@ class ChartGenerator:
             if sl_price is None:
                 sl_price = entry_price * (1 + DEFAULT_SL_PCT / 100)
 
-            tp1_price = entry_price * (1 + (tp1_pct if tp1_pct is not None else DEFAULT_TP1_PCT) / 100)
-            tp2_price = entry_price * (1 + (tp2_pct if tp2_pct is not None else DEFAULT_TP2_PCT) / 100)
+            if tp1_price is None:
+                tp1_price = entry_price * (1 + (DEFAULT_TP1_PCT if DEFAULT_TP1_PCT is not None else 5.0) / 100)
 
-        # === FIX: TP1 ต้องสูงกว่าราคาปัจจุบัน ===
-        if tp1_price <= current_price:
-            tp1_price = current_price * 1.05
-            tp2_price = current_price * 1.10
-            tp1_pct = 5.0
-            tp2_pct = 10.0
+            if tp2_price is None:
+                tp2_price = entry_price * (1 + (DEFAULT_TP2_PCT if DEFAULT_TP2_PCT is not None else 10.0) / 100)
 
-            if use_smart_entry and entry_price is not None and entry_price < current_price * 0.95:
-                entry_price = current_price * 0.98
-                sl_price = entry_price * (1 + DEFAULT_SL_PCT / 100)
-
-        entry_zone_top = entry_price * 1.009
-        entry_zone_bottom = entry_price * 0.991
-
+        # คำนวณเปอร์เซ็นต์
         sl_pct = ((sl_price - entry_price) / entry_price) * 100
         tp1_pct_display = ((tp1_price - entry_price) / entry_price) * 100
         tp2_pct_display = ((tp2_price - entry_price) / entry_price) * 100
+
+        # Entry Zone
+        entry_zone_top = entry_price * 1.009
+        entry_zone_bottom = entry_price * 0.991
 
         # === สร้างกราฟ ===
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10),
@@ -365,6 +331,6 @@ class ChartGenerator:
         return self.generate_trading_chart(df, symbol,
                                           use_smart_entry=True,
                                           entry_price=None,
-                                          tp1_pct=None,
-                                          tp2_pct=None,
+                                          tp1_price=None,
+                                          tp2_price=None,
                                           sl_price=None)
