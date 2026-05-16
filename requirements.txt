@@ -9,3 +9,4 @@ matplotlib==3.6.2
 numpy==1.26.4
 requests==2.31
 chartgenerator==0.1a19
+load-dotenv==0.1.0
