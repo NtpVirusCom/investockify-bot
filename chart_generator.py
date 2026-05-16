@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import matplotlib.font_manager as fm
 import pandas as pd
 import numpy as np
 import io
@@ -9,57 +8,6 @@ from config import COLORS, DEFAULT_TP1_PCT, DEFAULT_TP2_PCT, DEFAULT_SL_PCT
 class ChartGenerator:
     def __init__(self):
         plt.style.use('default')
-        # ตั้งค่า font สำหรับ emoji
-        self._setup_emoji_font()
-
-    def _setup_emoji_font(self):
-        """หา font ที่รองรับ emoji"""
-        # ลองหา font ที่รองรับ emoji ตามลำดับ
-        emoji_font_candidates = [
-            'Segoe UI Emoji',      # Windows
-            'Segoe UI Symbol',     # Windows fallback
-            'Noto Color Emoji',    # Linux
-            'Noto Emoji',          # Linux fallback
-            'Twemoji',             # Cross-platform
-            'EmojiOne',            # Cross-platform
-        ]
-
-        self.emoji_font = None
-        for font_name in emoji_font_candidates:
-            try:
-                fp = fm.FontProperties(family=font_name)
-                # ทดสอบว่า font นี้ใช้ได้จริง
-                fig, ax = plt.subplots(figsize=(1, 1))
-                ax.text(0.5, 0.5, "\U0001f3af", fontproperties=fp, fontsize=20)
-                plt.close()
-                self.emoji_font = fp
-                print(f"Using emoji font: {font_name}")
-                break
-            except:
-                continue
-
-        if self.emoji_font is None:
-            print("Warning: No emoji font found, using text fallback")
-
-    def _emoji_text(self, text_with_emoji):
-        """
-        สร้าง text ที่มี emoji โดยใช้ font ที่เหมาะสม
-        ถ้าไม่มี emoji font จะใช้ text แทน
-        """
-        if self.emoji_font is None:
-            # Fallback: แทนที่ emoji ด้วย text
-            replacements = {
-                '\U0001f3af': 'TP ',      # 🎯
-                '\u25b6': '>> ',           # ▶
-                '\U0001f6e1': 'ENTRY ',    # 🛡
-                '\U0001f6d1': 'SL ',       # 🛑
-            }
-            result = text_with_emoji
-            for emoji, text in replacements.items():
-                result = result.replace(emoji, text)
-            return result, None  # None = ใช้ default font
-
-        return text_with_emoji, self.emoji_font
 
     def calculate_ema(self, data: pd.Series, period: int):
         return data.ewm(span=period, adjust=False).mean()
@@ -101,22 +49,6 @@ class ChartGenerator:
         atr = true_range.rolling(period).mean()
         return atr
 
-    def _add_label(self, ax, x, y, text, color, fontsize=11, fontweight='bold'):
-        """เพิ่ม label พร้อมจัดการ emoji font"""
-        text_clean, font_prop = self._emoji_text(text)
-
-        if font_prop:
-            ax.text(x, y, text_clean,
-                   fontsize=fontsize, fontweight=fontweight, va='bottom',
-                   fontproperties=font_prop,
-                   bbox=dict(boxstyle='round,pad=0.5', facecolor=color,
-                            edgecolor='white', alpha=0.9), color='white')
-        else:
-            ax.text(x, y, text_clean,
-                   fontsize=fontsize, fontweight=fontweight, va='bottom',
-                   bbox=dict(boxstyle='round,pad=0.5', facecolor=color,
-                            edgecolor='white', alpha=0.9), color='white')
-
     def generate_trading_chart(self, df: pd.DataFrame, symbol: str,
                               entry_price: float = None,
                               tp1_pct: float = None,
@@ -124,11 +56,17 @@ class ChartGenerator:
                               sl_price: float = None,
                               use_smart_entry: bool = True):
 
-        ema20 = self.calculate_ema(df['Close'], 20)
-        ema50 = self.calculate_ema(df['Close'], 50)
-        ema200 = self.calculate_ema(df['Close'], 200)
+        close = df['Close']
+        ema20 = self.calculate_ema(close, 20)
+        ema50 = self.calculate_ema(close, 50)
+        ema200 = self.calculate_ema(close, 200)
 
-        current_price = df['Close'].iloc[-1]
+        # ค่า EMA ล่าสุด
+        ema20_last = ema20.iloc[-1]
+        ema50_last = ema50.iloc[-1]
+        ema200_last = ema200.iloc[-1]
+
+        current_price = close.iloc[-1]
 
         # === กำหนด Entry, SL, TP ===
         if use_smart_entry and entry_price is None:
@@ -206,51 +144,100 @@ class ChartGenerator:
         ax1.plot(x_range, ema50, color=COLORS['ema50'], linewidth=2, label='EMA 50', alpha=0.8)
         ax1.plot(x_range, ema200, color=COLORS['ema200'], linewidth=2, label='EMA 200', alpha=0.8)
 
-        # --- Horizontal Lines ---
+        # --- Horizontal Lines (TP/SL/Entry) ---
         ax1.axhline(y=tp2_price, color=COLORS['tp2'], linestyle='-', linewidth=2, alpha=0.9)
         ax1.axhline(y=tp1_price, color=COLORS['tp1'], linestyle='--', linewidth=1.5, alpha=0.9)
-        ax1.axhline(y=entry_price, color=COLORS['entry'], linestyle='--', linewidth=1.5, alpha=0.9)
+        ax1.axhline(y=entry_price, color=COLORS['entry'], linestyle='dotted', linewidth=1.5, alpha=0.9)
         ax1.axhline(y=sl_price, color=COLORS['sl'], linestyle='-', linewidth=2, alpha=0.9)
 
+        # Entry Zone
         ax1.axhspan(entry_zone_bottom, entry_zone_top, alpha=0.15, color=COLORS['entry'])
 
         change_pct = ((current_price - entry_price) / entry_price) * 100
 
-        # ============================================================
-        # LABELS - วางตรงระดับเส้น พร้อม emoji
-        # ============================================================
+        # === กำหนดขอบเขตแกน Y ก่อนวาง Label ===
+        price_min = min(df['Low'].min(), sl_price * 0.95)
+        price_max = max(df['High'].max(), tp2_price * 1.05)
+        ax1.set_ylim(price_min, price_max)
+        ax1.set_xlim(-1, len(df))
 
+        # === คำนวณ y_shift หลังกำหนด ylim ===
+        y_range = price_max - price_min
+        y_shift = y_range * 0.008
         x_offset = len(df) * 0.02
-        y_shift = (ax1.get_ylim()[1] - ax1.get_ylim()[0]) * 0.008
+
+        # ============================================================
+        # LABELS - วางให้ตรงระดับเส้น (เหมือน Apexify)
+        # ============================================================
 
         # TP2 Label
-        self._add_label(ax1, x_offset, tp2_price + y_shift,
-                       f"\U0001f3af TP2 ${tp2_price:,.2f} (+{tp2_pct_display:.1f}%)",
-                       COLORS['tp2'])
+        ax1.text(x_offset, tp2_price + y_shift,
+                f"TP2 ${tp2_price:,.2f} (+{tp2_pct_display:.1f}%)",
+                fontsize=11, fontweight='bold', va='bottom',
+                bbox=dict(boxstyle='round,pad=0.5', facecolor=COLORS['tp2'],
+                         edgecolor='white', alpha=0.9), color='white')
 
         # TP1 Label
-        self._add_label(ax1, x_offset, tp1_price + y_shift,
-                       f"\U0001f3af TP1 ${tp1_price:,.2f} (+{tp1_pct_display:.1f}%)",
-                       COLORS['tp1'])
+        ax1.text(x_offset, tp1_price + y_shift,
+                f"TP1 ${tp1_price:,.2f} (+{tp1_pct_display:.1f}%)",
+                fontsize=11, fontweight='bold', va='bottom',
+                bbox=dict(boxstyle='round,pad=0.5', facecolor=COLORS['tp1'],
+                         edgecolor='white', alpha=0.9), color='white')
 
         # NOW Label
-        self._add_label(ax1, x_offset, current_price + y_shift,
-                       f"\u25b6 NOW ${current_price:,.2f}",
-                       COLORS['entry'])
+        ax1.text(x_offset, current_price + y_shift,
+                f">> NOW ${current_price:,.2f}",
+                fontsize=11, fontweight='bold', va='bottom',
+                bbox=dict(boxstyle='round,pad=0.5', facecolor=COLORS['entry'],
+                         edgecolor='white', alpha=0.9), color='white')
 
         # ENTRY Label
         if use_smart_entry and entry_price != current_price:
-            entry_text = f"\U0001f6e1 ENTRY ${entry_zone_bottom:,.2f}-${entry_zone_top:,.2f} ({change_pct:+.1f}%)"
+            entry_text = f"ENTRY ${entry_zone_bottom:,.2f}-${entry_zone_top:,.2f} ({change_pct:+.1f}%)"
         else:
-            entry_text = f"\U0001f6e1 ENTRY: ${entry_price:,.2f} ({change_pct:+.1f}%)"
+            entry_text = f"ENTRY: ${entry_price:,.2f} ({change_pct:+.1f}%)"
 
-        self._add_label(ax1, x_offset, entry_price + y_shift,
-                       entry_text, COLORS['tp1'], fontsize=10)
+        ax1.text(x_offset, entry_price + y_shift,
+                entry_text,
+                fontsize=10, fontweight='bold', va='bottom',
+                bbox=dict(boxstyle='round,pad=0.4', facecolor=COLORS['tp1'],
+                         edgecolor='white', alpha=0.8), color='white')
 
         # SL Label
-        self._add_label(ax1, x_offset, sl_price + y_shift,
-                       f"\U0001f6d1 SL ${sl_price:,.2f} ({sl_pct:.1f}%)",
-                       COLORS['sl'])
+        ax1.text(x_offset, sl_price + y_shift,
+                f"SL ${sl_price:,.2f} ({sl_pct:.1f}%)",
+                fontsize=11, fontweight='bold', va='bottom',
+                bbox=dict(boxstyle='round,pad=0.5', facecolor=COLORS['sl'],
+                         edgecolor='white', alpha=0.9), color='white')
+
+        # ============================================================
+        # EMA VALUE LABELS - แสดงค่า EMA ล่าสุดที่ด้านขวาของกราฟ
+        # ============================================================
+        x_right = len(df) * 0.98  # ด้านขวา 98%
+
+        # EMA 20 Label
+        ax1.text(x_right, ema20_last + y_shift,
+                f"EMA20 {ema20_last:,.2f}",
+                fontsize=9, fontweight='bold', va='bottom', ha='right',
+                color=COLORS['ema20'],
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
+                         edgecolor=COLORS['ema20'], alpha=0.9))
+
+        # EMA 50 Label
+        ax1.text(x_right, ema50_last + y_shift,
+                f"EMA50 {ema50_last:,.2f}",
+                fontsize=9, fontweight='bold', va='bottom', ha='right',
+                color=COLORS['ema50'],
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
+                         edgecolor=COLORS['ema50'], alpha=0.9))
+
+        # EMA 200 Label
+        ax1.text(x_right, ema200_last + y_shift,
+                f"EMA200 {ema200_last:,.2f}",
+                fontsize=9, fontweight='bold', va='bottom', ha='right',
+                color=COLORS['ema200'],
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
+                         edgecolor=COLORS['ema200'], alpha=0.9))
 
         # ============================================================
 
@@ -258,14 +245,9 @@ class ChartGenerator:
         ax1.yaxis.tick_right()
         ax1.yaxis.set_label_position("right")
 
-        ax1.set_title(f'Apexify -- {symbol}  |  Entry Zone + TP + SL Plan\n'
+        ax1.set_title(f'Apexify \u2014 {symbol}  |  Entry Zone + TP + SL Plan\n'
                      f'EMA: 20(Blue) 50(Orange) 200(Purple)',
                      fontsize=14, fontweight='bold', pad=20)
-
-        price_min = min(df['Low'].min(), sl_price * 0.95)
-        price_max = max(df['High'].max(), tp2_price * 1.05)
-        ax1.set_ylim(price_min, price_max)
-        ax1.set_xlim(-1, len(df))
 
         ax1.grid(True, alpha=0.3, linestyle='-')
         ax1.set_axisbelow(True)
