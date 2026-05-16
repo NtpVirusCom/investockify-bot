@@ -69,10 +69,10 @@ class ChartGenerator:
         current_price = close.iloc[-1]
 
         # === à¹à¸ªà¸à¸à¸à¸£à¸²à¸à¹à¸à¸à¸²à¸° 3 à¹à¸à¸·à¸­à¸à¸¥à¹à¸²à¸ªà¸¸à¸ (90 à¸§à¸±à¸) à¹à¸à¹à¸à¸³à¸à¸§à¸à¸à¸²à¸à¸à¹à¸­à¸¡à¸¹à¸¥ 3 à¸à¸µ ===
-        df_display = df.tail(30).copy()
-        ema20_display = ema20.tail(30)
-        ema50_display = ema50.tail(30)
-        ema200_display = ema200.tail(30)
+        df_display = df.tail(60).copy()
+        ema20_display = ema20.tail(60)
+        ema50_display = ema50.tail(60)
+        ema200_display = ema200.tail(60)
 
         # à¹à¸à¹ df_display à¹à¸à¸ df à¹à¸à¸à¸²à¸£ plot à¸à¸£à¸²à¸
         df = df_display
