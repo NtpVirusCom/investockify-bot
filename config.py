@@ -8,7 +8,7 @@ load_dotenv()
 # ==========================================
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-DEFAULT_TIMEFRAME = "2y"
+DEFAULT_TIMEFRAME = "3y"
 DEFAULT_INTERVAL = "1d"
 
 # ค่า default สำหรับ Manual Mode
