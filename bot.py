@@ -1,1058 +1,434 @@
-# =====================================v.5 code เดิม v.1=====================
-from telegram import ( 
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    ReplyKeyboardMarkup,
-    KeyboardButton
-)
-
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    CallbackQueryHandler,
-    MessageHandler,
-    filters,
-    ContextTypes
-)
-
+import logging
 import os
-import pandas as pd
-import numpy as np
-import yfinance as yf
-
-# =========================================================
-# TOKEN
-# =========================================================
-
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-
-# =========================================================
-# CONFIG
-# =========================================================
-
-TIMEFRAME = "1d"
-
-PIVOT_LEN = 5
-
-MIN_ATR_STRENGTH = 0.03
-
-MAX_LEVEL_AGE = 500
-
-MAX_ACTIVE_LEVELS_EACH = 10
-
-MERGE_THRESHOLD = 0.8
-
-ZONE_WIDTH = 0.25
-
-BREAK_SENS = 0.1
-
-MAX_BREAKOUT_SIGNALS = 4
-
-ATR_PERIOD = 14
-
-MAX_DISTANCE_FROM_PRICE = 0.5
-
-MIN_BREAKOUT_MOVE_ATR = 0.1
-
-# =========================================================
-# GLOBAL STATE
-# =========================================================
-
-active_levels = {}
-
-broken_levels = {}
-
-last_break = {}
-
-# =========================================================
-# WELCOME MESSAGE
-# =========================================================
-
-WELCOME_MESSAGE = """
-⚡ ยินดีต้อนรับสู่ Apexify
-
-🤖 ระบบวิเคราะห์หุ้นด้วย Adaptive S/R AI
-
-รองรับ:
-• หุ้น US
-• หุ้นไทย
-• Crypto
-
-👇 กด 📊 วิเคราะห์หุ้น เพื่อเริ่มต้น
-"""
-
-# =========================================================
-# MAIN MENU
-# =========================================================
-
-MAIN_MENU = ReplyKeyboardMarkup(
-    [
-        [
-            KeyboardButton("📊 วิเคราะห์หุ้น"),
-            KeyboardButton("📱 เปิดเมนูหลัก")
-        ],
-        [
-            KeyboardButton("💎 บัญชี / VIP"),
-            KeyboardButton("📖 คู่มือ /manual")
-        ]
-    ],
-    resize_keyboard=True
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler,
+    ConversationHandler, CallbackQueryHandler,
+    filters, ContextTypes
 )
+from data_fetcher import DataFetcher
+from chart_generator import ChartGenerator
+from config import TELEGRAM_TOKEN, DEFAULT_TP1_PCT, DEFAULT_TP2_PCT, DEFAULT_SL_PCT
 
-# =========================================================
-# INLINE MENU
-# =========================================================
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-def get_main_inline_keyboard():
+SYMBOL, ENTRY, TP_SL = range(3)
+user_data = {}
+
+data_fetcher = DataFetcher()
+chart_generator = ChartGenerator()
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    welcome_text = (
+        "\U0001f680 *ยินดีต้อนรับสู่ Apexify Trading Bot!*\n\n"
+        "พิมพ์ชื่อสัญลักษณ์หุ้น/สินค้าโภคภัณฑ์ เพื่อดูกราฟการเทรดทันที\n"
+        "หรือใช้คำสั่งต่อไปนี้:\n\n"
+        "\U0001f4cc */chart <symbol>* - ดูกราฟพร้อมตั้งค่า TP/SL\n"
+        "\U0001f4cc */quick <symbol>* - ดูกราฟแบบเร็ว (Smart Entry)\n"
+        "\U0001f4cc */help* - ดูคำแนะนำทั้งหมด\n\n"
+        "*ตัวอย่างสัญลักษณ์:*\n"
+        "\u2022 GC=F (ทองคำ)\n"
+        "\u2022 SI=F (เงิน)\n"
+        "\u2022 CL=F (น้ำมัน WTI)\n"
+        "\u2022 AAPL, TSLA, NVDA (หุ้น US)\n\n"
+        "พิมพ์ชื่อสัญลักษณ์ได้เลย! \U0001f447"
+    )
+    await update.message.reply_text(welcome_text, parse_mode='Markdown')
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_text = (
+        "\U0001f4d6 *คู่มือการใช้งาน Apexify Bot*\n\n"
+        "*คำสั่งพื้นฐาน:*\n"
+        "\u2022 `/start` - เริ่มต้นใช้งาน\n"
+        "\u2022 `/chart <symbol>` - สร้างกราฟพร้อมตั้งค่า TP/SL\n"
+        "\u2022 `/quick <symbol>` - ดูกราฟเร็วๆ (Smart Entry)\n"
+        "\u2022 `/help` - ดูคำแนะนำ\n\n"
+        "*โหมด Smart Entry:*\n"
+        "\u2022 ระบบจะหา Swing Low ใกล้ EMA200 อัตโนมัติ\n"
+        "\u2022 SL คำนวณจาก ATR (2.5x)\n"
+        "\u2022 TP คำนวณจาก Risk:Reward (1:2 และ 1:4)\n\n"
+        "*โหมด Manual:*\n"
+        "\u2022 ใช้ `/chart` เพื่อระบุ Entry และ TP/SL เอง"
+    )
+    await update.message.reply_text(help_text, parse_mode='Markdown')
+
+async def quick_chart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """คำสั่ง /quick - ใช้ Smart Entry เหมือน Apexify"""
+    if not context.args:
+        await update.message.reply_text(
+            "\u274c กรุณาระบุสัญลักษณ์\nตัวอย่าง: `/quick GC=F`",
+            parse_mode='Markdown'
+        )
+        return
+
+    symbol = context.args[0].upper()
+    await update.message.reply_text(f"\u23f3 กำลังวิเคราะห์ {symbol} ด้วย Smart Entry...")
+
+    df, error = data_fetcher.get_stock_data(symbol)
+    if error:
+        await update.message.reply_text(f"\u274c {error}")
+        return
+
+    # ใช้ Smart Entry (เหมือน Apexify)
+    chart_buf = chart_generator.generate_trading_chart(
+        df, symbol,
+        use_smart_entry=True,
+        entry_price=None,
+        tp1_pct=None,
+        tp2_pct=None,
+        sl_price=None
+    )
+
+    current_price = df['Close'].iloc[-1]
+
+    await update.message.reply_photo(
+        photo=chart_buf,
+        caption=(
+            f"\U0001f4ca *{symbol}* | Apexify Smart Chart\n"
+            f"ราคาปัจจุบัน: `${current_price:,.2f}`\n\n"
+            f"\U0001f4a1 *Smart Entry* ระบบหาจุดเข้าอัตโนมัติ\n"
+            f"ใช้ `/chart {symbol}` เพื่อตั้งค่าเอง"
+        ),
+        parse_mode='Markdown'
+    )
+
+async def chart_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """คำสั่ง /chart - ตั้งค่าเอง"""
+    if not context.args:
+        await update.message.reply_text(
+            "\u274c กรุณาระบุสัญลักษณ์\nตัวอย่าง: `/chart GC=F`",
+            parse_mode='Markdown'
+        )
+        return
+
+    symbol = context.args[0].upper()
+    user_id = update.effective_user.id
+
+    user_data[user_id] = {'symbol': symbol}
+
+    df, error = data_fetcher.get_stock_data(symbol)
+    if error:
+        await update.message.reply_text(f"\u274c {error}")
+        return
+
+    current_price = df['Close'].iloc[-1]
+    user_data[user_id]['current_price'] = current_price
+    user_data[user_id]['df'] = df
 
     keyboard = [
-
-        [
-            InlineKeyboardButton(
-                "📊 ลอง AAPL",
-                callback_data="stock_AAPL"
-            ),
-
-            InlineKeyboardButton(
-                "⚡ ลอง NVDA",
-                callback_data="stock_NVDA"
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "🇹🇭 ลอง PTT.BK",
-                callback_data="stock_PTT"
-            )
-        ]
-
+        [InlineKeyboardButton(
+            f"\U0001f916 Smart Entry (แนะนำ)",
+            callback_data="mode_smart"
+        )],
+        [InlineKeyboardButton(
+            f"ใช้ราคาปัจจุบัน (${current_price:,.2f})",
+            callback_data="mode_current"
+        )],
+        [InlineKeyboardButton("ระบุราคาเอง", callback_data="mode_manual")]
     ]
-
-    return InlineKeyboardMarkup(keyboard)
-
-# =========================================================
-# FORMAT SYMBOL
-# =========================================================
-
-def format_symbol(symbol):
-
-    symbol = symbol.upper().strip()
-
-    thai_stocks = [
-
-        "PTT",
-        "AOT",
-        "CPALL",
-        "SCB",
-        "KBANK",
-        "ADVANC",
-        "BDMS",
-        "BBL",
-        "KTB"
-
-    ]
-
-    if symbol in thai_stocks:
-
-        return f"{symbol}.BK"
-
-    if symbol.endswith("USDT"):
-
-        return symbol.replace(
-            "USDT",
-            "-USD"
-        )
-
-    return symbol
-
-# =========================================================
-# FETCH DATA
-# =========================================================
-
-def fetch_ohlcv(symbol):
-
-    try:
-
-        ticker = yf.Ticker(symbol)
-
-        df = ticker.history(
-
-            period="2y",
-
-            interval=TIMEFRAME,
-
-            auto_adjust=False
-
-        )
-
-        if df.empty:
-
-            return None
-
-        df = df.reset_index()
-
-        df.columns = [
-
-            str(c).lower().replace(" ", "_")
-
-            for c in df.columns
-
-        ]
-
-        keep_cols = [
-
-            "date",
-            "datetime",
-            "open",
-            "high",
-            "low",
-            "close",
-            "volume"
-
-        ]
-
-        existing = [
-
-            c for c in keep_cols
-
-            if c in df.columns
-
-        ]
-
-        df = df[existing]
-
-        if "date" in df.columns:
-
-            df.rename(
-                columns={"date": "timestamp"},
-                inplace=True
-            )
-
-        if "datetime" in df.columns:
-
-            df.rename(
-                columns={"datetime": "timestamp"},
-                inplace=True
-            )
-
-        df.dropna(inplace=True)
-
-        if len(df) < 100:
-
-            return None
-
-        return df
-
-    except:
-
-        return None
-
-# =========================================================
-# ATR
-# =========================================================
-
-def calculate_atr(df):
-
-    df = df.copy()
-
-    df["prev_close"] = (
-        df["close"].shift(1)
-    )
-
-    df["tr1"] = (
-        df["high"] - df["low"]
-    )
-
-    df["tr2"] = abs(
-        df["high"] - df["prev_close"]
-    )
-
-    df["tr3"] = abs(
-        df["low"] - df["prev_close"]
-    )
-
-    df["tr"] = df[
-        ["tr1", "tr2", "tr3"]
-    ].max(axis=1)
-
-    df["atr"] = df["tr"].rolling(
-        ATR_PERIOD
-    ).mean()
-
-    return df
-
-# =========================================================
-# PIVOT DETECTION
-# =========================================================
-
-def detect_pivots(df):
-
-    highs = []
-
-    lows = []
-
-    for i in range(
-        PIVOT_LEN,
-        len(df) - PIVOT_LEN
-    ):
-
-        current_high = (
-            df["high"].iloc[i]
-        )
-
-        current_low = (
-            df["low"].iloc[i]
-        )
-
-        left_high = df["high"].iloc[
-            i - PIVOT_LEN:i
-        ]
-
-        right_high = df["high"].iloc[
-            i + 1:i + PIVOT_LEN + 1
-        ]
-
-        left_low = df["low"].iloc[
-            i - PIVOT_LEN:i
-        ]
-
-        right_low = df["low"].iloc[
-            i + 1:i + PIVOT_LEN + 1
-        ]
-
-        atr = df["atr"].iloc[i]
-
-        if pd.isna(atr):
-
-            continue
-
-        # =================================================
-        # RESISTANCE
-        # =================================================
-
-        if (
-            current_high >= left_high.max()
-            and
-            current_high >= right_high.max()
-        ):
-
-            strength = (
-                current_high -
-                df["close"].iloc[i]
-            ) / atr
-
-            if (
-                strength >=
-                MIN_ATR_STRENGTH
-            ):
-
-                highs.append({
-                    "price": current_high,
-                    "bar_index": i
-                })
-
-        # =================================================
-        # SUPPORT
-        # =================================================
-
-        if (
-            current_low <= left_low.min()
-            and
-            current_low <= right_low.min()
-        ):
-
-            strength = (
-                df["close"].iloc[i] -
-                current_low
-            ) / atr
-
-            if (
-                strength >=
-                MIN_ATR_STRENGTH
-            ):
-
-                lows.append({
-                    "price": current_low,
-                    "bar_index": i
-                })
-
-    return highs, lows
-
-# =========================================================
-# MERGE LEVELS
-# =========================================================
-
-def merge_levels(levels, atr):
-
-    if not levels:
-
-        return []
-
-    levels = sorted(
-        levels,
-        key=lambda x: x["price"]
-    )
-
-    merged = []
-
-    current = [levels[0]]
-
-    for lvl in levels[1:]:
-
-        avg_price = np.mean(
-            [x["price"] for x in current]
-        )
-
-        if abs(
-            lvl["price"] - avg_price
-        ) <= atr * MERGE_THRESHOLD:
-
-            current.append(lvl)
-
-        else:
-
-            merged.append(current)
-
-            current = [lvl]
-
-    merged.append(current)
-
-    result = []
-
-    for group in merged:
-
-        avg_price = np.mean(
-            [x["price"] for x in group]
-        )
-
-        latest_bar = max(
-            [x["bar_index"] for x in group]
-        )
-
-        result.append({
-            "price": round(avg_price, 2),
-            "bar_index": latest_bar,
-            "strength": len(group)
-        })
-
-    return result
-
-# =========================================================
-# UPDATE LEVELS
-# =========================================================
-
-def update_levels(symbol, df):
-
-    global active_levels
-
-    df = calculate_atr(df)
-
-    atr = df["atr"].iloc[-1]
-
-    current_price = df["close"].iloc[-1]
-
-    highs, lows = detect_pivots(df)
-
-    current_bar = len(df)
-
-    highs = [
-        x for x in highs
-        if current_bar - x["bar_index"]
-        <= MAX_LEVEL_AGE
-    ]
-
-    lows = [
-        x for x in lows
-        if current_bar - x["bar_index"]
-        <= MAX_LEVEL_AGE
-    ]
-
-    merged_highs = merge_levels(
-        highs,
-        atr
-    )
-
-    merged_lows = merge_levels(
-        lows,
-        atr
-    )
-
-    merged_highs = [
-        x for x in merged_highs
-        if (
-            x["price"] > current_price
-            and
-            (
-                x["price"] -
-                current_price
-            ) / current_price
-            <= MAX_DISTANCE_FROM_PRICE
-        )
-    ]
-
-    merged_lows = [
-        x for x in merged_lows
-        if (
-            x["price"] < current_price
-            and
-            (
-                current_price -
-                x["price"]
-            ) / current_price
-            <= MAX_DISTANCE_FROM_PRICE
-        )
-    ]
-
-    merged_highs = sorted(
-        merged_highs,
-        key=lambda x: (
-            abs(
-                x["price"] -
-                current_price
-            ),
-            -x["strength"]
-        )
-    )[:MAX_ACTIVE_LEVELS_EACH]
-
-    merged_lows = sorted(
-        merged_lows,
-        key=lambda x: (
-            abs(
-                x["price"] -
-                current_price
-            ),
-            -x["strength"]
-        )
-    )[:MAX_ACTIVE_LEVELS_EACH]
-
-    levels = []
-
-    # =====================================================
-    # RESISTANCE
-    # =====================================================
-
-    for h in merged_highs:
-
-        levels.append({
-
-            "type": "resistance",
-
-            "price": round(
-                h["price"],
-                2
-            ),
-
-            "strength": h["strength"],
-
-            "zone_top": (
-                h["price"] +
-                atr * ZONE_WIDTH
-            ),
-
-            "zone_bottom": (
-                h["price"] -
-                atr * ZONE_WIDTH
-            )
-        })
-
-    # =====================================================
-    # SUPPORT
-    # =====================================================
-
-    for l in merged_lows:
-
-        levels.append({
-
-            "type": "support",
-
-            "price": round(
-                l["price"],
-                2
-            ),
-
-            "strength": l["strength"],
-
-            "zone_top": (
-                l["price"] +
-                atr * ZONE_WIDTH
-            ),
-
-            "zone_bottom": (
-                l["price"] -
-                atr * ZONE_WIDTH
-            )
-        })
-
-    levels = sorted(
-        levels,
-        key=lambda x: x["price"],
-        reverse=True
-    )
-
-    active_levels[symbol] = levels
-
-    return levels
-
-# =========================================================
-# BREAKOUTS
-# =========================================================
-
-def detect_breakout(symbol, df):
-
-    global broken_levels
-
-    if symbol not in active_levels:
-
-        return []
-
-    if symbol not in broken_levels:
-
-        broken_levels[symbol] = []
-
-    df = calculate_atr(df)
-
-    close_price = df["close"].iloc[-1]
-
-    atr = df["atr"].iloc[-1]
-
-    buffer = atr * BREAK_SENS
-
-    signals = []
-
-    remaining = []
-
-    breakout_count = 0
-
-    for lvl in active_levels[symbol]:
-
-        breakout_move = (
-            abs(
-                close_price -
-                lvl["price"]
-            ) / atr
-        )
-
-        # =================================================
-        # BREAK RESISTANCE
-        # =================================================
-
-        if (
-            lvl["type"] == "resistance"
-            and
-            close_price >
-            lvl["zone_top"] + buffer
-            and
-            breakout_move >=
-            MIN_BREAKOUT_MOVE_ATR
-        ):
-
-            if (
-                breakout_count <
-                MAX_BREAKOUT_SIGNALS
-            ):
-
-                signals.append(
-                    f"🚀 {symbol}\n"
-                    f"Break Resistance\n"
-                    f"Level: {lvl['price']:.2f}\n"
-                    f"Current: {close_price:.2f}\n"
-                    f"Strength: {lvl['strength']}"
-                )
-
-                breakout_count += 1
-
-        # =================================================
-        # BREAK SUPPORT
-        # =================================================
-
-        elif (
-            lvl["type"] == "support"
-            and
-            close_price <
-            lvl["zone_bottom"] - buffer
-            and
-            breakout_move >=
-            MIN_BREAKOUT_MOVE_ATR
-        ):
-
-            if (
-                breakout_count <
-                MAX_BREAKOUT_SIGNALS
-            ):
-
-                signals.append(
-                    f"🔻 {symbol}\n"
-                    f"Break Support\n"
-                    f"Level: {lvl['price']:.2f}\n"
-                    f"Current: {close_price:.2f}\n"
-                    f"Strength: {lvl['strength']}"
-                )
-
-                breakout_count += 1
-
-        else:
-
-            remaining.append(lvl)
-
-    active_levels[symbol] = remaining
-
-    return signals
-
-# =========================================================
-# START
-# =========================================================
-
-async def start(update: Update, context):
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        WELCOME_MESSAGE,
-        reply_markup=MAIN_MENU
+        f"\U0001f4ca *{symbol}*\n"
+        f"ราคาปัจจุบัน: `${current_price:,.2f}`\n\n"
+        f"เลือกโหมด Entry:",
+        parse_mode='Markdown',
+        reply_markup=reply_markup
     )
 
-    await update.message.reply_text(
-        "📱 เมนูหลัก",
-        reply_markup=get_main_inline_keyboard()
-    )
-
-# =========================================================
-# BUTTON HANDLER
-# =========================================================
-
-async def button_handler(update, context):
-
+async def mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """จัดการ callback จากปุ่มเลือกโหมด"""
     query = update.callback_query
-
     await query.answer()
 
+    user_id = update.effective_user.id
     data = query.data
 
-    if data == "stock_AAPL":
+    if data == "mode_smart":
+        # ใช้ Smart Entry - ไม่ต้องถามอะไรเพิ่ม
+        await query.edit_message_text("\u23f3 กำลังวิเคราะห์ด้วย Smart Entry...")
+        await generate_smart_chart(update, context, user_id)
+    elif data == "mode_current":
+        user_data[user_id]['entry_price'] = user_data[user_id]['current_price']
+        user_data[user_id]['use_smart'] = False
+        await ask_tp_sl(update, context)
+    elif data == "mode_manual":
+        user_data[user_id]['use_smart'] = False
+        await query.edit_message_text(
+            "พิมพ์ราคา Entry ที่ต้องการ (เช่น 4555.80):"
+        )
+        return ENTRY
 
-        await send_real_stock_analysis(
-            query.message,
-            "AAPL"
+async def generate_smart_chart(update, context, user_id):
+    """สร้างกราฟด้วย Smart Entry"""
+    data = user_data[user_id]
+    symbol = data['symbol']
+    df = data['df']
+
+    chart_buf = chart_generator.generate_trading_chart(
+        df, symbol,
+        use_smart_entry=True,
+        entry_price=None,
+        tp1_pct=None,
+        tp2_pct=None,
+        sl_price=None
+    )
+
+    current_price = df['Close'].iloc[-1]
+
+    caption = (
+        f"\U0001f4ca *{symbol}* | Apexify Smart Trading Plan\n\n"
+        f"\U0001f916 ใช้ Smart Entry (Swing Low + ATR)\n"
+        f"\U0001f4c8 ราคาปัจจุบัน: `${current_price:,.2f}`\n\n"
+        f"ดูกราฟสำหรับระดับ TP/SL ที่คำนวณอัตโนมัติ"
+    )
+
+    if hasattr(update, 'callback_query') and update.callback_query:
+        await update.callback_query.message.reply_photo(
+            photo=chart_buf, caption=caption, parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_photo(
+            photo=chart_buf, caption=caption, parse_mode='Markdown'
         )
 
-    elif data == "stock_NVDA":
+async def ask_tp_sl(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """ถาม TP/SL สำหรับ Manual Entry"""
+    user_id = update.effective_user.id
 
-        await send_real_stock_analysis(
-            query.message,
-            "NVDA"
+    keyboard = [
+        [InlineKeyboardButton(
+            (f"\u2705 ใช้ค่าเริ่มต้น "
+             f"(TP1 +{DEFAULT_TP1_PCT}%, TP2 +{DEFAULT_TP2_PCT}%, SL {DEFAULT_SL_PCT}%)"),
+            callback_data="tp_default"
+        )],
+        [InlineKeyboardButton("\U0001f527 ตั้งค่าเอง", callback_data="tp_custom")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.callback_query.edit_message_text(
+        f"ราคา Entry: `${user_data[user_id]['entry_price']:,.2f}`\n\n"
+        f"เลือกการตั้งค่า TP/SL:",
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+
+async def entry_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """จัดการ callback จากปุ่ม Entry (เก่า - ยังคงไว้เพื่อ compatibility)"""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    data = query.data
+
+    if data == "entry_current":
+        user_data[user_id]['entry_price'] = user_data[user_id]['current_price']
+        user_data[user_id]['use_smart'] = False
+        await ask_tp_sl(update, context)
+    elif data == "entry_custom":
+        user_data[user_id]['use_smart'] = False
+        await query.edit_message_text(
+            "พิมพ์ราคา Entry ที่ต้องการ (เช่น 4555.80):"
         )
+        return ENTRY
 
-    elif data == "stock_PTT":
+async def tp_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """จัดการ callback TP/SL"""
+    query = update.callback_query
+    await query.answer()
 
-        await send_real_stock_analysis(
-            query.message,
-            "PTT.BK"
+    user_id = update.effective_user.id
+
+    if query.data == "tp_default":
+        await generate_manual_chart(update, context, user_id)
+    elif query.data == "tp_custom":
+        await query.edit_message_text(
+            "พิมพ์ค่า TP1 TP2 SL คั่นด้วยช่องว่าง\n"
+            "ตัวอย่าง: `5.6 22.6 -3.5`"
         )
+        return TP_SL
 
-# =========================================================
-# ANALYSIS
-# =========================================================
-
-async def send_real_stock_analysis(
-    message,
-    stock
-):
+async def custom_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """รับราคา Entry ที่ผู้ใช้พิมพ์เอง"""
+    user_id = update.effective_user.id
 
     try:
-
-        symbol = format_symbol(stock)
-
-        # =================================================
-        # COMPANY NAME
-        # =================================================
-
-        try:
-
-            ticker = yf.Ticker(symbol)
-
-            info = ticker.info
-
-            company_name = info.get(
-                "longName",
-                symbol
-            )
-
-        except:
-
-            company_name = symbol
-
-        # =================================================
-        # FETCH DATA
-        # =================================================
-
-        df = fetch_ohlcv(symbol)
-
-        if df is None:
-
-            await message.reply_text(
-                f"❌ ไม่พบข้อมูล {symbol}"
-            )
-
-            return
-
-        # =================================================
-        # LEVELS
-        # =================================================
-
-        levels = update_levels(
-            symbol,
-            df
-        )
-
-        # =================================================
-        # BREAKOUTS
-        # =================================================
-
-        breakouts = detect_breakout(
-            symbol,
-            df
-        )
-
-        current_price = (
-            df["close"].iloc[-1]
-        )
-
-        resistance_levels = [
-            x for x in levels
-            if x["type"] == "resistance"
-        ]
-
-        support_levels = [
-            x for x in levels
-            if x["type"] == "support"
-        ]
-
-        result = (
-            f"━━━━━━━━━━━━━━━━━\n"
-            f"📊 วิเคราะห์หุ้น {symbol}\n"
-            f"🏢 {company_name}\n"
-            f"━━━━━━━━━━━━━━━━━\n\n"
-            f"💵 Current Price: "
-            f"{current_price:.2f}\n\n"
-        )
-
-        # =================================================
-        # RESISTANCE
-        # =================================================
-
-        result += "🔴 Resistance\n"
-
-        if resistance_levels:
-
-            for lvl in resistance_levels:
-
-                result += (
-                    f"{lvl['price']:.2f} "
-                    f"(S:{lvl['strength']})\n"
-                )
-
-        else:
-
-            result += "No resistance\n"
-
-        # =================================================
-        # SUPPORT
-        # =================================================
-
-        result += "\n🟢 Support\n"
-
-        if support_levels:
-
-            for lvl in support_levels:
-
-                result += (
-                    f"{lvl['price']:.2f} "
-                    f"(S:{lvl['strength']})\n"
-                )
-
-        else:
-
-            result += "No support\n"
-
-        # =================================================
-        # BREAKOUTS
-        # =================================================
-
-        if breakouts:
-
-            result += (
-                "\n⚡ Breakouts\n\n"
-            )
-
-            result += "\n\n".join(
-                breakouts
-            )
-
-        # =================================================
-        # BUTTONS
-        # =================================================
+        entry_price = float(update.message.text.replace(',', ''))
+        user_data[user_id]['entry_price'] = entry_price
+        user_data[user_id]['use_smart'] = False
 
         keyboard = [
-
-            [
-                InlineKeyboardButton(
-                    "⭐ เพิ่ม Watchlist",
-                    callback_data="watchlist"
-                )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    "🔔 ตั้ง Alert",
-                    callback_data="alert"
-                ),
-
-                InlineKeyboardButton(
-                    "📈 เปิดกราฟ",
-                    callback_data="chart"
-                )
-            ]
-
+            [InlineKeyboardButton("ใช้ค่าเริ่มต้น", callback_data="tp_default")],
+            [InlineKeyboardButton("ตั้งค่าเอง", callback_data="tp_custom")]
         ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await message.reply_text(
-            result,
-            reply_markup=InlineKeyboardMarkup(
-                keyboard
-            )
+        await update.message.reply_text(
+            f"ราคา Entry: `${entry_price:,.2f}`\n\nเลือก TP/SL:",
+            reply_markup=reply_markup
         )
+        return ConversationHandler.END
 
-    except Exception as e:
+    except ValueError:
+        await update.message.reply_text("\u274c ราคาไม่ถูกต้อง กรุณาพิมพ์ตัวเลข")
+        return ENTRY
 
-        await message.reply_text(
-            f"❌ Error: {str(e)}"
+async def custom_tp_sl(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """รับค่า TP/SL ที่ผู้ใช้พิมพ์เอง"""
+    user_id = update.effective_user.id
+
+    try:
+        values = update.message.text.split()
+        if len(values) != 3:
+            raise ValueError("ต้องมี 3 ค่า")
+
+        tp1 = float(values[0])
+        tp2 = float(values[1])
+        sl = float(values[2])
+
+        user_data[user_id]['tp1'] = tp1
+        user_data[user_id]['tp2'] = tp2
+        user_data[user_id]['sl'] = sl
+
+        await generate_manual_chart(update, context, user_id)
+        return ConversationHandler.END
+
+    except ValueError:
+        await update.message.reply_text(
+            "\u274c รูปแบบไม่ถูกต้อง\nตัวอย่าง: `5.6 22.6 -3.5`"
         )
+        return TP_SL
 
-# =========================================================
-# MESSAGE HANDLER
-# =========================================================
+async def generate_manual_chart(update, context, user_id):
+    """สร้างกราฟแบบ Manual Entry"""
+    data = user_data[user_id]
+    symbol = data['symbol']
+    df = data['df']
+    entry = data['entry_price']
 
-async def handle_message(update, context):
+    tp1 = data.get('tp1', DEFAULT_TP1_PCT)
+    tp2 = data.get('tp2', DEFAULT_TP2_PCT)
+    sl_pct = data.get('sl', DEFAULT_SL_PCT)
 
-    text = (
-        update.message.text
-        .upper()
-        .strip()
+    sl_price = entry * (1 + sl_pct / 100)
+
+    if hasattr(update, 'callback_query') and update.callback_query:
+        await update.callback_query.edit_message_text("\u23f3 กำลังสร้างกราฟ...")
+    else:
+        await update.message.reply_text("\u23f3 กำลังสร้างกราฟ...")
+
+    chart_buf = chart_generator.generate_trading_chart(
+        df, symbol,
+        use_smart_entry=False,
+        entry_price=entry,
+        tp1_pct=tp1,
+        tp2_pct=tp2,
+        sl_price=sl_price
     )
 
-    # =====================================================
-    # MENU
-    # =====================================================
+    current = df['Close'].iloc[-1]
+    change = ((current - entry) / entry) * 100
 
-    if text == "📊 วิเคราะห์หุ้น":
+    caption = (
+        f"\U0001f4ca *{symbol}* | Manual Trading Plan\n\n"
+        f"\U0001f4b0 Entry: `${entry:,.2f}`\n"
+        f"\U0001f3af TP1: `${entry * (1 + tp1/100):,.2f}` (+{tp1}%)\n"
+        f"\U0001f3af TP2: `${entry * (1 + tp2/100):,.2f}` (+{tp2}%)\n"
+        f"\U0001f6d1 SL: `${entry * (1 + sl_pct/100):,.2f}` ({sl_pct}%)\n\n"
+        f"\U0001f4c8 ราคาปัจจุบัน: `${current:,.2f}` ({change:+.2f}%)"
+    )
 
-        await update.message.reply_text(
-            "📊 พิมพ์ชื่อหุ้น เช่น:\n\n"
-            "AAPL\n"
-            "NVDA\n"
-            "TSLA\n"
-            "MSFT\n"
-            "PTT.BK\n"
-            "AOT.BK\n"
-            "BTCUSDT"
+    if hasattr(update, 'callback_query') and update.callback_query:
+        await update.callback_query.message.reply_photo(
+            photo=chart_buf, caption=caption, parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_photo(
+            photo=chart_buf, caption=caption, parse_mode='Markdown'
         )
 
+async def handle_symbol(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """จัดการเมื่อผู้ใช้พิมพ์ชื่อสัญลักษณ์โดยตรง - ใช้ Smart Entry"""
+    symbol = update.message.text.strip().upper()
+
+    if symbol.startswith('/'):
         return
 
-    elif text == "📱 เปิดเมนูหลัก":
+    await update.message.reply_text(
+        f"\U0001f50d กำลังวิเคราะห์ {symbol} ด้วย Smart Entry..."
+    )
 
+    df, error = data_fetcher.get_stock_data(symbol)
+    if error:
         await update.message.reply_text(
-            "📱 เมนูหลัก",
-            reply_markup=get_main_inline_keyboard()
+            f"\u274c {error}\n\nลองใช้ `/chart {symbol}` เพื่อตั้งค่าเอง"
         )
-
         return
 
-    elif text == "💎 บัญชี / VIP":
+    # ใช้ Smart Entry เหมือน Apexify
+    chart_buf = chart_generator.generate_trading_chart(
+        df, symbol,
+        use_smart_entry=True,
+        entry_price=None,
+        tp1_pct=None,
+        tp2_pct=None,
+        sl_price=None
+    )
 
-        await update.message.reply_text(
-            """
-💎 สมาชิก VIP
+    current_price = df['Close'].iloc[-1]
 
-✅ วิเคราะห์หุ้น
-✅ Smart Alert
-✅ Watchlist
-✅ Portfolio
-"""
+    await update.message.reply_photo(
+        photo=chart_buf,
+        caption=(
+            f"\U0001f4ca *{symbol}* | Apexify Smart Chart\n"
+            f"ราคาปัจจุบัน: `${current_price:,.2f}`\n\n"
+            f"\U0001f916 Smart Entry: ระบบหาจุดเข้าอัตโนมัติ\n"
+            f"ใช้ `/chart {symbol}` เพื่อตั้งค่าเอง"
+        ),
+        parse_mode='Markdown'
+    )
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("\u274c ยกเลิกการดำเนินการ")
+    return ConversationHandler.END
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.error(f"Update {update} caused error {context.error}")
+    if update and update.effective_message:
+        await update.effective_message.reply_text(
+            "\u274c เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง"
         )
-
-        return
-
-    elif text == "📖 คู่มือ /MANUAL":
-
-        await update.message.reply_text(
-            """
-📖 วิธีใช้งาน
-
-1️⃣ กด 📊 วิเคราะห์หุ้น
-
-2️⃣ พิมพ์ชื่อหุ้น
-
-ตัวอย่าง:
-AAPL
-NVDA
-PTT.BK
-BTCUSDT
-
-3️⃣ ระบบจะวิเคราะห์ให้อัตโนมัติ
-"""
-        )
-
-        return
-
-    # =====================================================
-    # ANALYZE
-    # =====================================================
-
-    if len(text) >= 1:
-
-        await send_real_stock_analysis(
-            update.message,
-            text
-        )
-
-# =========================================================
-# MAIN
-# =========================================================
 
 def main():
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    app = Application.builder().token(
-        TELEGRAM_TOKEN
-    ).build()
-
-    app.add_handler(
-        CommandHandler(
-            "start",
-            start
-        )
+    chart_conv = ConversationHandler(
+        entry_points=[CommandHandler('chart', chart_command)],
+        states={
+            ENTRY: [MessageHandler(filters.TEXT & ~filters.COMMAND, custom_entry)],
+            TP_SL: [MessageHandler(filters.TEXT & ~filters.COMMAND, custom_tp_sl)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
     )
 
-    app.add_handler(
-        CallbackQueryHandler(
-            button_handler
-        )
-    )
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('help', help_command))
+    application.add_handler(CommandHandler('quick', quick_chart))
+    application.add_handler(chart_conv)
+    # ปุ่มใหม่
+    application.add_handler(CallbackQueryHandler(mode_callback, pattern='^mode_'))
+    # ปุ่มเก่า (compatibility)
+    application.add_handler(CallbackQueryHandler(entry_callback, pattern='^entry_'))
+    application.add_handler(CallbackQueryHandler(tp_callback, pattern='^tp_'))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_symbol))
+    application.add_error_handler(error_handler)
 
-    app.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            handle_message
-        )
-    )
+    print("\U0001f916 Bot is running...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
-    print("Bot running...")
-
-    app.run_polling()
-
-# =========================================================
-# START APP
-# =========================================================
-
-if __name__ == "__main__":
-
+if __name__ == '__main__':
     main()
