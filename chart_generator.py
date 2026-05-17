@@ -8,93 +8,205 @@ from config import COLORS, DEFAULT_TP1_PCT, DEFAULT_TP2_PCT, DEFAULT_SL_PCT
 class ChartGenerator:
     def __init__(self):
         plt.style.use('default')
+        # Constants from investockify_bot5
+        self.PIVOT_LEN = 5
+        self.MIN_ATR_STRENGTH = 0.03
+        self.MAX_LEVEL_AGE = 500
+        self.MAX_ACTIVE_LEVELS_EACH = 10
+        self.MERGE_THRESHOLD = 0.8
+        self.ZONE_WIDTH = 0.25
+        self.BREAK_SENS = 0.1
+        self.MAX_BREAKOUT_SIGNALS = 4
+        self.ATR_PERIOD = 14
+        self.MAX_DISTANCE_FROM_PRICE = 0.5
+        self.MIN_BREAKOUT_MOVE_ATR = 0.1
 
     def calculate_ema(self, data: pd.Series, period: int):
         return data.ewm(span=period, adjust=False).mean()
 
-    def find_support_resistance(self, df: pd.DataFrame, window: int = 10):
-        """หาแนวรับและแนวต้านจาก Pivot Points"""
-        highs = df['High'].rolling(window=window, center=True).max()
-        lows = df['Low'].rolling(window=window, center=True).min()
+    def calculate_atr(self, df: pd.DataFrame, period: int = 14):
+        """ATR calculation from investockify_bot5"""
+        df = df.copy()
+        df["prev_close"] = df["Close"].shift(1)
+        df["tr1"] = df["High"] - df["Low"]
+        df["tr2"] = abs(df["High"] - df["prev_close"])
+        df["tr3"] = abs(df["Low"] - df["prev_close"])
+        df["tr"] = df[["tr1", "tr2", "tr3"]].max(axis=1)
+        df["atr"] = df["tr"].rolling(period).mean()
+        return df
 
-        support = lows.quantile(0.25)
-        resistance = highs.quantile(0.75)
+    def detect_pivots(self, df):
+        """Pivot detection from investockify_bot5"""
+        highs = []
+        lows = []
 
-        return support, resistance
+        for i in range(self.PIVOT_LEN, len(df) - self.PIVOT_LEN):
+            current_high = df["High"].iloc[i]
+            current_low = df["Low"].iloc[i]
 
-    def find_poc(self, df: pd.DataFrame):
-        """หา POC (Point of Control) = ราคาที่มี Volume สูงสุด"""
-        price_volume = []
-        for idx, row in df.iterrows():
-            mid_price = (row['High'] + row['Low']) / 2
-            price_volume.append((mid_price, row['Volume']))
+            left_high = df["High"].iloc[i - self.PIVOT_LEN:i]
+            right_high = df["High"].iloc[i + 1:i + self.PIVOT_LEN + 1]
+            left_low = df["Low"].iloc[i - self.PIVOT_LEN:i]
+            right_low = df["Low"].iloc[i + 1:i + self.PIVOT_LEN + 1]
 
-        total_vol = sum(v for p, v in price_volume)
-        if total_vol > 0:
-            poc = sum(p * v for p, v in price_volume) / total_vol
-        else:
-            poc = df['Close'].mean()
+            atr = df["atr"].iloc[i]
+            if pd.isna(atr):
+                continue
 
-        return poc
+            # Resistance pivot
+            if (current_high >= left_high.max() and current_high >= right_high.max()):
+                strength = (current_high - df["Close"].iloc[i]) / atr
+                if strength >= self.MIN_ATR_STRENGTH:
+                    highs.append({"price": current_high, "bar_index": i})
 
-    def find_optimal_entry(self, df: pd.DataFrame, ema200: pd.Series, current_price: float):
+            # Support pivot
+            if (current_low <= left_low.min() and current_low <= right_low.min()):
+                strength = (df["Close"].iloc[i] - current_low) / atr
+                if strength >= self.MIN_ATR_STRENGTH:
+                    lows.append({"price": current_low, "bar_index": i})
+
+        return highs, lows
+
+    def merge_levels(self, levels, atr):
+        """Merge levels from investockify_bot5"""
+        if not levels:
+            return []
+
+        levels = sorted(levels, key=lambda x: x["price"])
+        merged = []
+        current = [levels[0]]
+
+        for lvl in levels[1:]:
+            avg_price = np.mean([x["price"] for x in current])
+            if abs(lvl["price"] - avg_price) <= atr * self.MERGE_THRESHOLD:
+                current.append(lvl)
+            else:
+                merged.append(current)
+                current = [lvl]
+
+        merged.append(current)
+
+        result = []
+        for group in merged:
+            avg_price = np.mean([x["price"] for x in group])
+            latest_bar = max([x["bar_index"] for x in group])
+            result.append({
+                "price": round(avg_price, 2),
+                "bar_index": latest_bar,
+                "strength": len(group)
+            })
+
+        return result
+
+    def find_optimal_entry(self, df: pd.DataFrame, current_price: float):
         """
-        Apexify TRUE Logic:
-        - Entry = แนวรับที่ปรับลงมาเล็กน้อย
-        - SL = ต่ำกว่า POC หรือ Swing Low ที่แท้จริง
-        - TP1 = แนวต้านที่มีอยู่จริง
-        - TP2 = แนวต้านถัดไปหรือ +6% จาก TP1
+        ใช้ Pivot Detection จาก investockify_bot5 ในการหา:
+        - Support = Entry Zone
+        - Resistance = TP1
+        - Next Resistance = TP2
+        - Swing Low = SL
         """
 
-        support, resistance = self.find_support_resistance(df.tail(60))
-        poc = self.find_poc(df.tail(60))
+        # Calculate ATR
+        df_atr = self.calculate_atr(df)
+        atr = df_atr["atr"].iloc[-1]
 
-        # หา Swing Low ที่แท้จริงในช่วง 4-6 สัปดาห์
-        recent_df = df.tail(30)
-        swing_lows = []
-        lows = recent_df['Low'].values
+        if pd.isna(atr):
+            atr = (df["High"] - df["Low"]).mean()
 
-        for i in range(1, len(lows) - 1):
-            if lows[i] < lows[i-1] and lows[i] < lows[i+1]:
-                swing_lows.append(lows[i])
+        # Detect pivots
+        highs, lows = self.detect_pivots(df_atr)
 
-        # SL = ต่ำกว่า POC หรือ Swing Low ที่แท้จริง
-        if swing_lows:
-            true_swing_low = min(swing_lows)
-            sl_price = max(poc * 0.995, true_swing_low * 0.99)
+        current_bar = len(df)
+
+        # Filter by age
+        highs = [x for x in highs if current_bar - x["bar_index"] <= self.MAX_LEVEL_AGE]
+        lows = [x for x in lows if current_bar - x["bar_index"] <= self.MAX_LEVEL_AGE]
+
+        # Merge levels
+        merged_highs = self.merge_levels(highs, atr)
+        merged_lows = self.merge_levels(lows, atr)
+
+        # Filter by distance from current price
+        merged_highs = [
+            x for x in merged_highs
+            if x["price"] > current_price and (x["price"] - current_price) / current_price <= self.MAX_DISTANCE_FROM_PRICE
+        ]
+
+        merged_lows = [
+            x for x in merged_lows
+            if x["price"] < current_price and (current_price - x["price"]) / current_price <= self.MAX_DISTANCE_FROM_PRICE
+        ]
+
+        # Sort by distance and strength
+        merged_highs = sorted(
+            merged_highs,
+            key=lambda x: (abs(x["price"] - current_price), -x["strength"])
+        )[:self.MAX_ACTIVE_LEVELS_EACH]
+
+        merged_lows = sorted(
+            merged_lows,
+            key=lambda x: (abs(x["price"] - current_price), -x["strength"])
+        )[:self.MAX_ACTIVE_LEVELS_EACH]
+
+        # === DETERMINE LEVELS ===
+
+        # TP1 = Nearest Resistance (strongest)
+        if merged_highs:
+            tp1_price = merged_highs[0]["price"]
+            tp1_strength = merged_highs[0]["strength"]
         else:
-            sl_price = poc * 0.99
+            tp1_price = current_price * 1.05
+            tp1_strength = 0
 
-        # Entry = แนวรับที่ปรับลงมาเล็กน้อย
-        entry_price = support * 0.99
+        # TP2 = Next Resistance or TP1 + 6%
+        if len(merged_highs) >= 2:
+            tp2_price = merged_highs[1]["price"]
+        else:
+            tp2_price = tp1_price * 1.06
 
-        # ถ้า Entry สูงกว่าราคาปัจจุบัน ปรับให้ต่ำกว่า
+        # Entry = Nearest Support (strongest)
+        if merged_lows:
+            entry_price = merged_lows[0]["price"]
+            entry_strength = merged_lows[0]["strength"]
+        else:
+            entry_price = current_price * 0.96
+            entry_strength = 0
+
+        # SL = Next Support or Entry - ATR buffer
+        if len(merged_lows) >= 2:
+            sl_price = merged_lows[1]["price"]
+        else:
+            sl_buffer = max(atr * 2, entry_price * 0.03)
+            sl_price = entry_price - sl_buffer
+
+        # Adjust if entry is above current price
         if entry_price >= current_price:
             entry_price = current_price * 0.96
+            sl_price = entry_price * (1 + DEFAULT_SL_PCT / 100)
 
-        # ถ้า Entry ต่ำกว่า SL มากเกินไป ปรับให้เหมาะสม
-        if entry_price < sl_price * 1.05:
-            entry_price = sl_price * 1.05
+        # Ensure SL is below entry
+        if sl_price >= entry_price:
+            sl_price = entry_price * 0.97
 
-        entry_date = df.index[-1]
-
-        return entry_price, entry_date, sl_price, support, resistance, poc
-
-    def calculate_atr(self, df: pd.DataFrame, period: int = 14):
-        high_low = df['High'] - df['Low']
-        high_close = np.abs(df['High'] - df['Close'].shift())
-        low_close = np.abs(df['Low'] - df['Close'].shift())
-        ranges = pd.concat([high_low, high_close, low_close], axis=1)
-        true_range = np.max(ranges, axis=1)
-        atr = true_range.rolling(period).mean()
-        return atr
+        return {
+            "entry": entry_price,
+            "sl": sl_price,
+            "tp1": tp1_price,
+            "tp2": tp2_price,
+            "support_levels": merged_lows,
+            "resistance_levels": merged_highs,
+            "atr": atr
+        }
 
     def generate_trading_chart(self, df: pd.DataFrame, symbol: str,
                               entry_price: float = None,
                               tp1_price: float = None,
                               tp2_price: float = None,
                               sl_price: float = None,
-                              use_smart_entry: bool = True):
+                              use_smart_entry: bool = True,
+                              tp1_pct: float = None,
+                              tp2_pct: float = None):
 
         close = df['Close']
         ema20 = self.calculate_ema(close, 20)
@@ -107,26 +219,31 @@ class ChartGenerator:
 
         current_price = close.iloc[-1]
 
-        # แสดงกราฟ 3 เดือน (90 วัน)
+        # แสดงกราฟ 3 เดือน (60 วัน)
         df_display = df.tail(60).copy()
         ema20_display = ema20.tail(60)
         ema50_display = ema50.tail(60)
         ema200_display = ema200.tail(60)
 
-        df = df_display
+        df_plot = df_display
 
-        # กำหนด Entry, SL, TP
+        # Backward compatibility
+        if tp1_pct is not None and tp1_price is None:
+            tp1_price = entry_price * (1 + tp1_pct / 100) if entry_price else None
+        if tp2_pct is not None and tp2_price is None:
+            tp2_price = entry_price * (1 + tp2_pct / 100) if entry_price else None
+
+        # กำหนด Entry, SL, TP ด้วย investockify logic
         if use_smart_entry and entry_price is None:
-            entry_price, entry_date, auto_sl, support, resistance, poc = self.find_optimal_entry(df, ema200, current_price)
+            levels = self.find_optimal_entry(df, current_price)
 
-            if sl_price is None:
-                sl_price = auto_sl
-
-            if tp1_price is None:
-                tp1_price = resistance
-
-            if tp2_price is None:
-                tp2_price = tp1_price * 1.06
+            entry_price = levels["entry"]
+            sl_price = levels["sl"]
+            tp1_price = levels["tp1"]
+            tp2_price = levels["tp2"]
+            support_levels = levels["support_levels"]
+            resistance_levels = levels["resistance_levels"]
+            atr = levels["atr"]
         else:
             if entry_price is None:
                 entry_price = current_price
@@ -140,10 +257,14 @@ class ChartGenerator:
             if tp2_price is None:
                 tp2_price = entry_price * (1 + (DEFAULT_TP2_PCT if DEFAULT_TP2_PCT is not None else 10.0) / 100)
 
+            support_levels = []
+            resistance_levels = []
+            atr = (df["High"] - df["Low"]).mean()
+
         # คำนวณเปอร์เซ็นต์
-        sl_pct = ((sl_price - entry_price) / entry_price) * 100
-        tp1_pct_display = ((tp1_price - entry_price) / entry_price) * 100
-        tp2_pct_display = ((tp2_price - entry_price) / entry_price) * 100
+        sl_pct = ((sl_price - current_price) / current_price) * 100
+        tp1_pct_display = ((tp1_price - current_price) / current_price) * 100
+        tp2_pct_display = ((tp2_price - current_price) / current_price) * 100
 
         entry_zone_top = entry_price * 1.009
         entry_zone_bottom = entry_price * 0.991
@@ -154,7 +275,7 @@ class ChartGenerator:
                                        sharex=True)
 
         # Candlestick
-        for i, (idx, row) in enumerate(df.iterrows()):
+        for i, (idx, row) in enumerate(df_plot.iterrows()):
             x = i
             open_p = row['Open']
             high_p = row['High']
@@ -177,12 +298,19 @@ class ChartGenerator:
             ax1.plot([x, x], [low_p, high_p], color=color, linewidth=1)
 
         # EMA Lines
-        x_range = range(len(df))
+        x_range = range(len(df_plot))
         ax1.plot(x_range, ema20_display.values, color=COLORS['ema20'], linewidth=2, label='EMA 20', alpha=0.8)
         ax1.plot(x_range, ema50_display.values, color=COLORS['ema50'], linewidth=2, label='EMA 50', alpha=0.8)
         ax1.plot(x_range, ema200_display.values, color=COLORS['ema200'], linewidth=2, label='EMA 200', alpha=0.8)
 
-        # Horizontal Lines
+        # === PLOT SUPPORT/RESISTANCE LEVELS ===
+        for lvl in support_levels:
+            ax1.axhline(y=lvl["price"], color='#4CAF50', linestyle=':', linewidth=1, alpha=0.5)
+
+        for lvl in resistance_levels:
+            ax1.axhline(y=lvl["price"], color='#F44336', linestyle=':', linewidth=1, alpha=0.5)
+
+        # Horizontal Lines (TP/SL/Entry)
         ax1.axhline(y=tp2_price, color=COLORS['tp2'], linestyle='-', linewidth=2, alpha=0.9)
         ax1.axhline(y=tp1_price, color=COLORS['tp1'], linestyle='--', linewidth=1.5, alpha=0.9)
         ax1.axhline(y=entry_price, color=COLORS['entry'], linestyle='dotted', linewidth=1.5, alpha=0.9)
@@ -190,55 +318,61 @@ class ChartGenerator:
 
         ax1.axhspan(entry_zone_bottom, entry_zone_top, alpha=0.15, color=COLORS['entry'])
 
-        change_pct = ((current_price - entry_price) / entry_price) * 100
+        change_pct = ((entry_price - current_price) / current_price) * 100
 
-        price_min = min(df['Low'].min(), sl_price * 0.95)
-        price_max = max(df['High'].max(), tp2_price * 1.05)
+        price_min = min(df_plot['Low'].min(), sl_price * 0.95)
+        price_max = max(df_plot['High'].max(), tp2_price * 1.05)
         ax1.set_ylim(price_min, price_max)
-        ax1.set_xlim(-1, len(df))
+        ax1.set_xlim(-1, len(df_plot))
 
         y_range = price_max - price_min
         y_shift = y_range * 0.008
-        x_offset = len(df) * 0.02
+        x_offset = len(df_plot) * 0.02
+        x_center = len(df_plot) / 2
 
         # Labels
-        ax1.text(x_offset, tp2_price + y_shift,
-                f"TP2 ${tp2_price:,.2f} (+{tp2_pct_display:.1f}%)",
-                fontsize=11, fontweight='bold', va='bottom',
+        ax1.text(x_offset, tp2_price,
+                #f"\U0001f3af TP2 ${tp2_price:,.2f} (+{tp2_pct_display:.1f}%)",
+                f"\u25C9 TP2 ${tp2_price:,.2f} (+{tp2_pct_display:.1f}%)",
+                fontsize=11, fontweight='bold', va='center',
                 bbox=dict(boxstyle='round,pad=0.5', facecolor=COLORS['tp2'],
                          edgecolor='white', alpha=0.9), color='white')
 
-        ax1.text(x_offset, tp1_price + y_shift,
-                f"TP1 ${tp1_price:,.2f} (+{tp1_pct_display:.1f}%)",
-                fontsize=11, fontweight='bold', va='bottom',
+        ax1.text(x_offset, tp1_price,
+                #f"\U0001f3af TP1 ${tp1_price:,.2f} (+{tp1_pct_display:.1f}%)",
+                f"\u25C9 TP1 ${tp1_price:,.2f} (+{tp1_pct_display:.1f}%)",
+                fontsize=11, fontweight='bold', va='center',
                 bbox=dict(boxstyle='round,pad=0.5', facecolor=COLORS['tp1'],
                          edgecolor='white', alpha=0.9), color='white')
 
-        ax1.text(x_offset, current_price + y_shift,
-                f">> NOW ${current_price:,.2f}",
-                fontsize=11, fontweight='bold', va='bottom',
-                bbox=dict(boxstyle='round,pad=0.5', facecolor=COLORS['entry'],
+        ax1.text(x_offset, current_price,
+                f"\u25b6 NOW ${current_price:,.2f}",
+                fontsize=11, fontweight='bold', va='center',
+                bbox=dict(boxstyle='round,pad=0.5', facecolor=COLORS['now'],
                          edgecolor='white', alpha=0.9), color='white')
 
         if use_smart_entry and entry_price != current_price:
-            entry_text = f"ENTRY ${entry_zone_bottom:,.2f}-${entry_zone_top:,.2f} ({change_pct:+.1f}%)"
+            #entry_text = f"\U0001f6e1 ENTRY ${entry_zone_bottom:,.2f}-${entry_zone_top:,.2f} ({change_pct:+.1f}%)"
+            entry_text = f"\u25A3 ENTRY ${entry_zone_bottom:,.2f}-${entry_zone_top:,.2f} ({change_pct:+.1f}%)"
         else:
-            entry_text = f"ENTRY: ${entry_price:,.2f} ({change_pct:+.1f}%)"
+            #entry_text = f"\U0001f6e1 ENTRY: ${entry_price:,.2f} ({change_pct:+.1f}%)"
+            entry_text = f"\u25A3 ENTRY: ${entry_price:,.2f} ({change_pct:+.1f}%)"
 
-        ax1.text(x_offset, entry_price + y_shift,
+        ax1.text(x_offset, entry_price,
                 entry_text,
-                fontsize=10, fontweight='bold', va='bottom',
-                bbox=dict(boxstyle='round,pad=0.4', facecolor=COLORS['tp1'],
+                fontsize=10, fontweight='bold', va='center',
+                bbox=dict(boxstyle='round,pad=0.4', facecolor=COLORS['entry'],
                          edgecolor='white', alpha=0.8), color='white')
 
-        ax1.text(x_offset, sl_price + y_shift,
-                f"SL ${sl_price:,.2f} ({sl_pct:.1f}%)",
-                fontsize=11, fontweight='bold', va='bottom',
+        ax1.text(x_offset, sl_price,
+                #f"\U0001f6d1 SL ${sl_price:,.2f} ({sl_pct:.1f}%)",
+                f"\u25CD SL ${sl_price:,.2f} ({sl_pct:.1f}%)",
+                fontsize=11, fontweight='bold', va='center',
                 bbox=dict(boxstyle='round,pad=0.5', facecolor=COLORS['sl'],
                          edgecolor='white', alpha=0.9), color='white')
 
         # EMA Labels
-        x_right = len(df) * 0.98
+        x_right = len(df_plot) * 0.98
 
         ax1.text(x_right, ema20_display.iloc[-1] + y_shift,
                 f"EMA20 {ema20_last:,.2f}",
@@ -265,7 +399,7 @@ class ChartGenerator:
         ax1.yaxis.tick_right()
         ax1.yaxis.set_label_position("right")
 
-        ax1.set_title(f'Apexify — {symbol}  |  Swing Entry (1-4W) + TP + SL\n'
+        ax1.set_title(f'Apexify \u2014 {symbol}  |  Pivot S/R Entry + TP + SL\n'
                      f'EMA: 20(Blue) 50(Orange) 200(Purple)',
                      fontsize=14, fontweight='bold', pad=20)
 
@@ -273,10 +407,10 @@ class ChartGenerator:
         ax1.set_axisbelow(True)
 
         # Volume
-        volumes = df['Volume'].values
+        volumes = df_plot['Volume'].values
         max_vol = volumes.max()
 
-        for i, (idx, row) in enumerate(df.iterrows()):
+        for i, (idx, row) in enumerate(df_plot.iterrows()):
             x = i
             color = COLORS['bullish'] if row['Close'] >= row['Open'] else COLORS['bearish']
             ax2.bar(x, row['Volume'], color=color, alpha=0.7, width=0.8)
@@ -287,8 +421,8 @@ class ChartGenerator:
         ax2.set_ylim(0, max_vol * 1.5)
         ax2.grid(True, alpha=0.3, linestyle='-')
 
-        date_labels = [d.strftime('%b %d') for d in df.index[::5]]
-        x_ticks = range(0, len(df), 5)
+        date_labels = [d.strftime('%b %d') for d in df_plot.index[::5]]
+        x_ticks = range(0, len(df_plot), 5)
         ax2.set_xticks(x_ticks)
         ax2.set_xticklabels(date_labels, rotation=45, ha='right', fontsize=9)
 
