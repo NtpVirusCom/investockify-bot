@@ -556,7 +556,7 @@ def _df_from_cg(df: pd.DataFrame) -> pd.DataFrame:
 # TOKEN & CONFIG
 # =========================================================
 TELEGRAM_TOKEN = "7732232153:AAEaIP5zpcR90YxKXMX_03uYNlui-tIgl68"
-TIMEFRAME = "15M"
+TIMEFRAME = "1D"
 
 # =========================================================
 # WELCOME & MENUS
