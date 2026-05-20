@@ -12,3 +12,4 @@ chartgenerator==0.1a19
 load-dotenv==0.1.0
 mplfinance==0.12.10b0
 uvicorn==0.47.0
+fastapi==0.136.1
