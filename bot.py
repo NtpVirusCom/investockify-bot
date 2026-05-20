@@ -32,8 +32,8 @@ import uvicorn
 
 # ─── Configuration ───────────────────────────────
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-PORT = int(os.environ.get("PORT", "8080"))
-DATA_DIR = os.environ.get("DATA_DIR", "./data")
+PORT = int(os.environ.get("PORT"))
+DATA_DIR = os.environ.get("DATA_DIR")
 
 DEFAULT_TP1_PCT = 5.6
 DEFAULT_TP2_PCT = 22.6
