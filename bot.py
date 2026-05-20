@@ -31,7 +31,7 @@ from fastapi import FastAPI
 import uvicorn
 
 # ─── Configuration ───────────────────────────────
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "7732232153:AAEtA-tJnd1LiRtMKmQWeKE1L98ho9sMt-E")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 PORT = int(os.environ.get("PORT", "8080"))
 DATA_DIR = os.environ.get("DATA_DIR", "./data")
 
