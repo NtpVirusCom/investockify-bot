@@ -1,5 +1,6 @@
+#***apexify_bot9.1.py***
 """
-Apexify Trading Bot - Improved Version  ***apexify_bot9.1.py***
+Apexify Trading Bot - Improved Version
 ======================================
 ปรับปรุงจาก investockify_bot8.py โดยแก้ไข:
 1. สูตร % ให้ถูกต้องตามหลักการเทรด (คำนวณจาก Entry)
