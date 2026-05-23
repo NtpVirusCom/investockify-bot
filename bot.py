@@ -77,7 +77,7 @@ logger = logging.getLogger(__name__)
 # =========================================================
 # ENVIRONMENT CONFIG (SECURITY HARDENED)
 # =========================================================
-#TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 if not TELEGRAM_TOKEN:
     raise ValueError("TELEGRAM_TOKEN environment variable is required.")
