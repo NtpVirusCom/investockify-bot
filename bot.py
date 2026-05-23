@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3     ***apexify_bot13.py***
 """
 🤖 Apexify Bot — Fixed Edition v7.0
 แก้ไขปัญหาหลัก:
