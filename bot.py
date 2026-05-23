@@ -555,7 +555,7 @@ def _df_from_cg(df: pd.DataFrame) -> pd.DataFrame:
 # =========================================================
 # TOKEN & CONFIG
 # =========================================================
-TELEGRAM_TOKEN = "7732232153:AAEaIP5zpcR90YxKXMX_03uYNlui-tIgl68"
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TIMEFRAME = "1D"
 
 # =========================================================
