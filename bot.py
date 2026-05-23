@@ -1374,11 +1374,11 @@ def format_news_section(symbol: str, max_items: int = 5) -> str:
     bull_count = sum(1 for s in scored if s["emoji"] == "🟢")
     bear_count = sum(1 for s in scored if s["emoji"] == "🔴")
     if bull_count > bear_count:
-        lines.append(f"  💬 หุ้นได้รับแรงหนุนจากข่าวด้านบวก {overall_emoji}\n")
+        lines.append(f"💬 หุ้นได้รับแรงหนุนจากข่าวด้านบวก 🟢\n")
     elif bear_count > bull_count:
-        lines.append(f"  💬 หุ้นได้รับแรงกดดันจากข่าวด้านลบ {overall_emoji}\n")
+        lines.append(f"💬 หุ้นได้รับแรงกดดันจากข่าวด้านลบ 🔴\n")
     else:
-        lines.append(f"  💬 ข่าวไม่มีนัยสำคัญต่อทิศทางราคา {overall_emoji}\n")
+        lines.append(f"💬 ข่าวไม่มีนัยสำคัญต่อทิศทางราคา ⚪\n")
     for item in scored:
         thai_title = item.get("thai_title", item["title"])
         display_title = thai_title if len(thai_title) <= 70 else thai_title[:67] + "..."
