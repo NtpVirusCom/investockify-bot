@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3    ***investockify_bot8.9.1.py***
 """
 🤖 Apexify Bot v9.2-fixed — Production Ready Edition
 ปรับปรุงจาก v9.2 โดยแก้ไข:
