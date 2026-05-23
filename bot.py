@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3   ***investockify_bot8.9.8.py***
 """
 🤖 Investockify Bot — Railway Ready
 รวมจุดเด่นจาก:
