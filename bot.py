@@ -34,6 +34,7 @@ import matplotlib.pyplot as plt
 import mplfinance as mpf
 import io
 import sys
+import os
 import logging
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Tuple
