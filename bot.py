@@ -55,8 +55,7 @@ logger = logging.getLogger(__name__)
 # =========================================================
 # ENVIRONMENT CONFIG
 # =========================================================
-#TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-TELEGRAM_TOKEN = "7732232153:AAEtA-tJnd1LiRtMKmQWeKE1L98ho9sMt-E"
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 if not TELEGRAM_TOKEN:
     # Fallback สำหรับ development (ไม่แนะนำใน production)
