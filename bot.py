@@ -2361,12 +2361,12 @@ async def send_real_stock_analysis(message, stock: str):
             detail_lines.append(f"📏 ATR: ${atr:,.2f}\n\n")
 
             if pos["valid"] and pos["shares"] > 0:
-                detail_lines.append("")
+                detail_lines.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n")
                 detail_lines.append(f"💰 จำนวนหุ้น: {pos['shares']:,} หุ้น\n")
                 detail_lines.append(f"เงินลงทุน: ${pos['investment']:,.2f}\n")
                 detail_lines.append(f"ขาดทุนสูงสุด: ${pos['risk_amount']:,.2f} ({RISK_PER_TRADE:.1f}%)\n\n")
             elif not pos["valid"]:
-                detail_lines.append("")
+                detail_lines.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n")
                 detail_lines.append(f"⚠️ ไม่แนะนำ: {pos.get('reason', 'Unknown')}\n\n")
 
         detail_text = "".join(detail_lines)
