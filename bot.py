@@ -301,7 +301,8 @@ THAI_STOCKS: Set[str] = {
     "ADVANC", "AOT", "BBL", "BDMS", "BH", "CPALL", "CPF",
     "CPN", "CRC", "DELTA", "DIF", "GPSC", "GULF", "HMPRO", "IVL",
     "KBANK", "KTB", "KTC", "MINT", "OR", "PTT", "PTTEP",
-    "PTTGC", "SCB", "SCC", "SCGP", "THAI", "TLI", "TRUE", "TTB"
+    "PTTGC", "SCB", "SCC", "SCGP", "THAI", "TLI", "TRUE", "TTB",
+    "AP", "AMATA", "EGCO", "LH", "ROJNA", "SCB", "SCC", "TTW"
 }
 
 CRYPTO_PAIRS: Set[str] = {
