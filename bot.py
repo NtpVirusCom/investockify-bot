@@ -2311,12 +2311,12 @@ async def send_real_stock_analysis(message, stock: str):
             detail_lines.append("━━━━━━━━━━━━━━━━━━━━\n")
             detail_lines.append("📐 รายละเอียดเทคนิค\n")
             detail_lines.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n")
-            detail_lines.append(f"Entry: ${entry:,.2f}\n")
-            detail_lines.append(f"Buy Zone: ${setup.entry_zone_bottom:,.2f} — ${setup.entry_zone_top:,.2f}\n")
-            detail_lines.append(f"SL: ${sl:,.2f} ({sl_pct:+.1f}%)\n")
-            detail_lines.append(f"TP1: ${tp1:,.2f} ({tp1_pct:+.1f}%) | R:R 1:{rr1:.1f}\n")
-            detail_lines.append(f"TP2: ${tp2:,.2f} ({tp2_pct:+.1f}%) | R:R 1:{rr2:.1f}\n")
-            detail_lines.append(f"ATR: ${atr:,.2f}\n\n")
+            detail_lines.append(f"📍 Entry: ${entry:,.2f}\n")
+            detail_lines.append(f"🟢 Buy Zone: ${setup.entry_zone_bottom:,.2f} — ${setup.entry_zone_top:,.2f}\n")
+            detail_lines.append(f"🛑 SL: ${sl:,.2f} ({sl_pct:+.1f}%)\n")
+            detail_lines.append(f"🎯 TP1: ${tp1:,.2f} ({tp1_pct:+.1f}%) | R:R 1:{rr1:.1f}\n")
+            detail_lines.append(f"🎯 TP2: ${tp2:,.2f} ({tp2_pct:+.1f}%) | R:R 1:{rr2:.1f}\n")
+            detail_lines.append(f"📏 ATR: ${atr:,.2f}\n\n")
 
             if pos["valid"] and pos["shares"] > 0:
                 detail_lines.append("")
@@ -2334,13 +2334,13 @@ async def send_real_stock_analysis(message, stock: str):
         key_levels_lines.append("🔑 ระดับราคาสำคัญ\n")
         key_levels_lines.append("━━━━━━━━━━━━━━━━━━━━\n")
         if support_levels:
-            key_levels_lines.append(f"แนวรับใกล้สุด: ${support_levels[0]['price']:.2f}\n")
+            key_levels_lines.append(f"🟢 แนวรับใกล้สุด: ${support_levels[0]['price']:.2f}\n")
         if resistance_levels:
-            key_levels_lines.append(f"แนวต้านใกล้สุด: ${resistance_levels[0]['price']:.2f}\n")
+            key_levels_lines.append(f"🔴 แนวต้านใกล้สุด: ${resistance_levels[0]['price']:.2f}\n")
         if setup and setup.poc:
-            key_levels_lines.append(f"ราคายุติธรรม (POC): ${setup.poc:.2f}\n")
+            key_levels_lines.append(f"🟡 ราคายุติธรรม (POC): ${setup.poc:.2f}\n")
         if setup and setup.vah and setup.val:
-            key_levels_lines.append(f"โซนความถี่สูง: ${setup.val:.2f} — ${setup.vah:.2f}\n")
+            key_levels_lines.append(f"🔵 โซนความถี่สูง: ${setup.val:.2f} — ${setup.vah:.2f}\n")
 
         key_levels_text = "".join(key_levels_lines)
 
