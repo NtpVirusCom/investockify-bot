@@ -309,6 +309,14 @@ CRYPTO_PAIRS: Set[str] = {
     "AVAX", "LINK", "MATIC", "LTC", "UNI", "AAVE"
 }
 
+COMMODITIES = {
+    "GOLD": "GC=F",       # Gold Futures
+    "SILVER": "SI=F",     # Silver Futures
+    "OIL": "CL=F",        # Crude Oil WTI
+    "GAS": "NG=F",        # Natural Gas
+    "COPPER": "HG=F",     # Copper Futures
+}
+
 
 def sanitize_input(text: str) -> Optional[str]:
     """ทำความสะอาด input ก่อนใช้งาน"""
@@ -338,6 +346,10 @@ def format_symbol(symbol: str) -> str:
 
     if symbol in CRYPTO_PAIRS:
         return f"{symbol}-USD"
+      
+    # Commodity Mapping
+    if symbol in COMMODITIES:
+        return COMMODITIES[symbol]
 
     return symbol
 
