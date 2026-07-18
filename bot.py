@@ -298,10 +298,10 @@ class TradeSetup:
 # INPUT SANITIZATION & SYMBOL FORMATTING
 # =========================================================
 THAI_STOCKS: Set[str] = {
-    "PTT", "AOT", "CPALL", "SCB", "KBANK", "ADVANC", "BDMS",
-    "BBL", "KTB", "TRUE", "OR", "BTS", "CPN", "MINT", "LH",
-    "SCC", "GULF", "DELTA", "EA", "COM7", "HANA", "KTC",
-    "TOP", "SPRC", "IRPC", "EGCO", "GPSC", "GUNKUL", "SUPER"
+    "ADVANC", "AOT", "BBL", "BDMS", "BH", "CPALL", "CPF",
+    "CPN", "CRC", "DELTA", "DIF", "GPSC", "GULF", "HMPRO", "IVL",
+    "KBANK", "KTB", "KTC", "MINT", "OR", "PTT", "PTTEP",
+    "PTTGC", "SCB", "SCC", "SCGP", "THAI", "TLI", "TRUE", "TTB"
 }
 
 CRYPTO_PAIRS: Set[str] = {
