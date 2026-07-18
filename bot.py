@@ -1367,8 +1367,6 @@ def analyze_stock_health(df: pd.DataFrame, setup: TradeSetup) -> str:
             vol_str = f"{current_vol:.2f}"
             avg_str = f"{avg_vol:.2f}"
         lines.append(f"　　 Vol {vol_str} | Avg {avg_str}\n")
-
-    lines.append("━━━━━━━━━━━━━━━━━━━━\n")
     return "".join(lines)
 
 # =========================================================
