@@ -313,23 +313,23 @@ CRYPTO_PAIRS: Set[str] = {
 COMMODITIES = {
     "GOLD": {
         "symbol": "GC=F",
-        "name": "Gold Futures"
+        "name": "ทองคำ (ออนซ์)"
     },
     "SILVER": {
         "symbol": "SI=F",
-        "name": "Silver Futures"
+        "name": "แร่เงิน (ออนซ์)"
     },
     "COPPER": {
         "symbol": "HG=F",
-        "name": "Copper Futures"
+        "name": "ทองแดง (ปอนด์)"
     },
     "OIL": {
         "symbol": "CL=F",
-        "name": "Crude Oil WTI"
+        "name": "น้ำมันดิบ WTI (บาร์เรล)"
     },
     "GAS": {
         "symbol": "NG=F",
-        "name": "Natural Gas"
+        "name": "ก๊าซธรรมชาติ (ล้านบีทียู)"
     }
 }
 
