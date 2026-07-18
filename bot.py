@@ -1129,23 +1129,24 @@ def get_action_card(setup: TradeSetup, current_price: float, trend: str) -> str:
     below_entry = current_price < setup.entry_zone_bottom
     above_entry = current_price > setup.entry_zone_top
     card = []
-    card.append("  ╔══════════════════╗\n")
-    card.append("  ║　　       📋 คำแนะนำการลงทุน　　       ║\n")
-    card.append("  ╠══════════════════╣\n")
+    card.append("━━━━━━━━━━━━━━━━━━━━\n")
+    card.append("📋 คำแนะนำการลงทุน\n")
+    card.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n")
     if in_entry_zone:
-        card.append("  ║       🟢 ซื้อได้เลย! ราคาอยู่ในโซนซื้อ        ║\n")
-        card.append(f"  ║　　   ตั้ง Limit Order ที่ ${entry:,.2f}　　    ║\n")
+        card.append("🟢 ซื้อได้เลย! ราคาอยู่ในโซนซื้อ\n")
+        card.append(f"└─ ตั้ง Limit Order ที่ ${entry:,.2f}\n")
     elif below_entry:
-        card.append("  ║　　　   🔴 ราคาต่ำกว่าโซนซื้อ　　　    ║\n")
-        card.append("  ║　　　  รอดูว่าจะเด้งกลับหรือไม่　　　   ║\n")
+        card.append("🔴 ราคาต่ำกว่าโซนซื้อ\n")
+        card.append("└─ รอดูว่าจะเด้งกลับหรือไม่\n")
     elif above_entry:
-        card.append("  ║　　　   🟡 ราคาสูงกว่าโซนซื้อ　　　    ║\n")
-        card.append("  ║　　　   รอ Pullback เข้าโซนซื้อ　　　   ║\n")
-    card.append("  ╠══════════════════╣\n")
-    card.append(f"  ║ 🎯 เป้าหมาย: TP1 ${tp1:,.2f} (+{setup.get_pct_from_entry(tp1):.1f}%) ║\n")
-    card.append(f"  ║　　　　　　 TP2 ${tp2:,.2f} (+{setup.get_pct_from_entry(tp2):.1f}%) ║\n")
-    card.append(f"  ║ 🛡️ ขาดทุนสูงสุด: ${sl:,.2f} ({setup.get_pct_from_entry(sl):.1f}%) ║\n")
-    card.append("  ╚══════════════════╝\n")
+        card.append("🟡 ราคาสูงกว่าโซนซื้อ\n")
+        card.append("└─ รอ Pullback เข้าโซนซื้อ\n")
+    card.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n")
+    card.append(f"🎯 เป้าหมายกำไร\n")
+    card.append(f"├─ TP1 ${tp1:,.2f} (+{setup.get_pct_from_entry(tp1):.1f}%)\n")
+    card.append(f"└─ TP2 ${tp2:,.2f} (+{setup.get_pct_from_entry(tp2):.1f}%)\n")
+    card.append(f"🛡️ ขาดทุนสูงสุด: ${sl:,.2f} ({setup.get_pct_from_entry(sl):.1f}%)\n")
+    card.append(f"└─ ${sl:,.2f} ({setup.get_pct_from_entry(sl):.1f}%)\n")
     return "".join(card)
 
 
