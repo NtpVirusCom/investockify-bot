@@ -2372,7 +2372,6 @@ async def send_real_stock_analysis(message, stock: str):
         detail_text = "".join(detail_lines)
 
         # Key Levels
-        #key_levels_lines = []
         key_levels_lines.append("━━━━━━━━━━━━━━━━━━━━\n")
         key_levels_lines.append("🔑 ระดับราคาสำคัญ\n")
         key_levels_lines.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n")
