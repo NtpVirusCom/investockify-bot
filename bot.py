@@ -369,6 +369,14 @@ def format_symbol(symbol: str) -> str:
     return symbol
 
 
+def get_commodity_name(symbol: str) -> Optional[str]:
+    """Return display name for commodity symbol."""
+    for item in COMMODITIES.values():
+        if item["symbol"] == symbol:
+            return item["name"]
+    return None
+  
+
 def is_valid_stock_input(text: str) -> bool:
     """Validate ชื่อหุ้น"""
     if not text:
