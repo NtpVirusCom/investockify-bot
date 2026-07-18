@@ -1145,8 +1145,8 @@ def get_action_card(setup: TradeSetup, current_price: float, trend: str) -> str:
     card.append(f"🎯 เป้าหมายกำไร\n")
     card.append(f"├─ TP1 ${tp1:,.2f} (+{setup.get_pct_from_entry(tp1):.1f}%)\n")
     card.append(f"└─ TP2 ${tp2:,.2f} (+{setup.get_pct_from_entry(tp2):.1f}%)\n")
-    card.append(f"🛡️ ขาดทุนสูงสุด: ${sl:,.2f} ({setup.get_pct_from_entry(sl):.1f}%)\n")
-    card.append(f"└─ ${sl:,.2f} ({setup.get_pct_from_entry(sl):.1f}%)\n")
+    card.append(f"🛡️ จุดตัดขาดทุน\n")
+    card.append(f"└─ SL ${sl:,.2f} ({setup.get_pct_from_entry(sl):.1f}%)\n")
     return "".join(card)
 
 
@@ -2361,20 +2361,21 @@ async def send_real_stock_analysis(message, stock: str):
             detail_lines.append(f"📏 ATR: ${atr:,.2f}\n\n")
 
             if pos["valid"] and pos["shares"] > 0:
-                detail_lines.append("")
+                detail_lines.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n")
                 detail_lines.append(f"💰 จำนวนหุ้น: {pos['shares']:,} หุ้น\n")
                 detail_lines.append(f"เงินลงทุน: ${pos['investment']:,.2f}\n")
                 detail_lines.append(f"ขาดทุนสูงสุด: ${pos['risk_amount']:,.2f} ({RISK_PER_TRADE:.1f}%)\n\n")
             elif not pos["valid"]:
-                detail_lines.append("")
+                detail_lines.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n")
                 detail_lines.append(f"⚠️ ไม่แนะนำ: {pos.get('reason', 'Unknown')}\n\n")
 
         detail_text = "".join(detail_lines)
 
         # Key Levels
-        key_levels_lines = []
-        key_levels_lines.append("🔑 ระดับราคาสำคัญ\n")
+        #key_levels_lines = []
         key_levels_lines.append("━━━━━━━━━━━━━━━━━━━━\n")
+        key_levels_lines.append("🔑 ระดับราคาสำคัญ\n")
+        key_levels_lines.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n")
         if support_levels:
             key_levels_lines.append(f"🟢 แนวรับใกล้สุด: ${support_levels[0]['price']:.2f}\n")
         if resistance_levels:
