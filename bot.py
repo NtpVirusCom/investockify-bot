@@ -2502,7 +2502,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• หุ้นสหรัฐ: `AAPL`, `NVDA`, `TSLA`, `BRK.B`\n"
             "• หุ้นไทย: `PTT`, `AOT`, `CPALL`, `OR`, `BTS`\n"
             "• Crypto: `BTC`, `ETH`, `SOL`\n"
-            "• Commodities: `GC=F`, `CL=F`, `SI=F`\n"
+            "• Commodities: `GOLD`, `SILVER`, `COPPER`, `OIL`, `GAS`\n"
             "• Indices: `^GSPC`, `^DJI`\n\n"
             "หรือใช้ /analyze <ชื่อหุ้น>"
         )
