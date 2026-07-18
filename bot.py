@@ -2277,13 +2277,20 @@ async def send_real_stock_analysis(message, stock: str):
         symbol = format_symbol(clean_input)
         logger.info("Analyzing symbol: %s (original: %s)", symbol, clean_input)
 
-        try:
-            ticker = yf.Ticker(symbol)
-            info = ticker.info
-            company_name = info.get("longName") or symbol
-        except Exception as e:
-            logger.warning("Could not fetch company info for %s: %s", symbol, e)
-            company_name = symbol
+
+        commodity_name = get_commodity_name(symbol)
+
+        if commodity_name:
+            company_name = commodity_name
+        else:
+            try:
+                ticker = yf.Ticker(symbol)
+                info = ticker.info
+                company_name = info.get("longName") or symbol
+            except Exception as e:
+                logger.warning("Could not fetch company info for %s: %s", symbol, e)
+                company_name = symbol
+
 
         df = data_fetcher.fetch_ohlcv(symbol)
         if df is None:
