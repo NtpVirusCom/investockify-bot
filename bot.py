@@ -310,11 +310,26 @@ CRYPTO_PAIRS: Set[str] = {
 }
 
 COMMODITIES = {
-    "GOLD": "GC=F",       # Gold Futures
-    "SILVER": "SI=F",     # Silver Futures
-    "OIL": "CL=F",        # Crude Oil WTI
-    "GAS": "NG=F",        # Natural Gas
-    "COPPER": "HG=F",     # Copper Futures
+    "GOLD": {
+        "symbol": "GC=F",
+        "name": "Gold Futures"
+    },
+    "SILVER": {
+        "symbol": "SI=F",
+        "name": "Silver Futures"
+    },
+    "OIL": {
+        "symbol": "CL=F",
+        "name": "Crude Oil WTI"
+    },
+    "GAS": {
+        "symbol": "NG=F",
+        "name": "Natural Gas"
+    },
+    "COPPER": {
+        "symbol": "HG=F",
+        "name": "Copper Futures"
+    }
 }
 
 
