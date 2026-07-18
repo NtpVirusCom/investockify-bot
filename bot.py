@@ -364,7 +364,7 @@ def format_symbol(symbol: str) -> str:
       
     # Commodity Mapping
     if symbol in COMMODITIES:
-        return COMMODITIES[symbol]
+      return COMMODITIES[symbol]["symbol"]
 
     return symbol
 
