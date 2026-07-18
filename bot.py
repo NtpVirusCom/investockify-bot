@@ -1108,7 +1108,7 @@ def get_action_card(setup: TradeSetup, current_price: float, trend: str) -> str:
     card.append("  ╠══════════════════╣\n")
     card.append(f"  ║ 🎯 เป้าหมาย: TP1 ${tp1:,.2f} (+{setup.get_pct_from_entry(tp1):.1f}%) ║\n")
     card.append(f"  ║　　　　　　 TP2 ${tp2:,.2f} (+{setup.get_pct_from_entry(tp2):.1f}%) ║\n")
-    card.append(f"  ║ 🛑 ขาดทุนสูงสุด: ${sl:,.2f} ({setup.get_pct_from_entry(sl):.1f}%) ║\n")
+    card.append(f"  ║ 🛡️ ขาดทุนสูงสุด: ${sl:,.2f} ({setup.get_pct_from_entry(sl):.1f}%) ║\n")
     card.append("  ╚══════════════════╝\n")
     return "".join(card)
 
