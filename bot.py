@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🤖 Investockify Bot — Railway Cost-Optimized Edition (v2.1.8)
+🤖 Investockify Bot — Railway Cost-Optimized Edition (v2.2.0)
 ==========================================================v.24==
 ปรับปรุงจาก v2.0.3 สำหรับประหยัดค่าใช้จ่าย Railway:
   • ลด Memory Usage: จำกัด cache size, ใช้ weakref, ลบ df ที่ไม่ใช้
@@ -83,7 +83,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 TIMEFRAME = os.environ.get("TIMEFRAME", "1d")
 PORTFOLIO_VALUE = float(os.environ.get("PORTFOLIO_VALUE", "100000"))
 RISK_PER_TRADE = float(os.environ.get("RISK_PER_TRADE", "1.0"))
-VERSION = "2.1.8"
+VERSION = "2.2.0"
 
 BOT_MODE = os.environ.get("BOT_MODE", "polling").lower()
 PORT = int(os.environ.get("PORT", "8080"))
