@@ -318,6 +318,10 @@ COMMODITIES = {
         "symbol": "SI=F",
         "name": "Silver Futures"
     },
+    "COPPER": {
+        "symbol": "HG=F",
+        "name": "Copper Futures"
+    },
     "OIL": {
         "symbol": "CL=F",
         "name": "Crude Oil WTI"
@@ -325,10 +329,6 @@ COMMODITIES = {
     "GAS": {
         "symbol": "NG=F",
         "name": "Natural Gas"
-    },
-    "COPPER": {
-        "symbol": "HG=F",
-        "name": "Copper Futures"
     }
 }
 
