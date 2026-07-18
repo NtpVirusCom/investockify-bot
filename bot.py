@@ -1234,7 +1234,7 @@ def get_smart_summary_v2(setup, current_price: float, trend: str, weekly_trend: 
 
     lines = [
         f"📍 จังหวะการเข้า: {timing_emoji} {timing_status}",
-        f"⏱️ แนวโน้มตลาด: {trend} {trend_icon}",
+        f"🌎 แนวโน้มตลาด: {trend} {trend_icon}",
         f"📅 รายสัปดาห์: {weekly_trend} {weekly_trend_icon}",
         f"⚖️ R:R 1:{setup.rr1:.1f} | ห่างจากโซนซื้อ {distance:+.1f}%",
         f"💡 คำแนะนำ: {context}",
