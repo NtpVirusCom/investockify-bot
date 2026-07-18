@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-🤖 Investockify Bot — Railway Cost-Optimized Edition (v2.1.1)
-==========================================================v.22==
+🤖 Investockify Bot — Railway Cost-Optimized Edition (v2.1.3)
+==========================================================v.23==
 ปรับปรุงจาก v2.0.3 สำหรับประหยัดค่าใช้จ่าย Railway:
   • ลด Memory Usage: จำกัด cache size, ใช้ weakref, ลบ df ที่ไม่ใช้
   • ลด CPU Usage: ลดการคำนวณซ้ำ, ใช้ lru_cache, ปิด matplotlib interactive
