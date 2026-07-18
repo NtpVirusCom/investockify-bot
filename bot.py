@@ -1141,7 +1141,6 @@ def get_action_card(setup: TradeSetup, current_price: float, trend: str) -> str:
     elif above_entry:
         card.append("🟡 ราคาสูงกว่าโซนซื้อ\n")
         card.append("└─ รอ Pullback เข้าโซนซื้อ\n")
-    card.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n")
     card.append(f"🎯 เป้าหมายกำไร\n")
     card.append(f"├─ TP1 ${tp1:,.2f} (+{setup.get_pct_from_entry(tp1):.1f}%)\n")
     card.append(f"└─ TP2 ${tp2:,.2f} (+{setup.get_pct_from_entry(tp2):.1f}%)\n")
@@ -2358,16 +2357,18 @@ async def send_real_stock_analysis(message, stock: str):
             detail_lines.append(f"🛑 SL: ${sl:,.2f} ({sl_pct:+.1f}%)\n")
             detail_lines.append(f"🎯 TP1: ${tp1:,.2f} ({tp1_pct:+.1f}%) | R:R 1:{rr1:.1f}\n")
             detail_lines.append(f"🎯 TP2: ${tp2:,.2f} ({tp2_pct:+.1f}%) | R:R 1:{rr2:.1f}\n")
-            detail_lines.append(f"📏 ATR: ${atr:,.2f}\n\n")
+            detail_lines.append(f"📏 ATR: ${atr:,.2f}\n")
 
             if pos["valid"] and pos["shares"] > 0:
                 detail_lines.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n")
                 detail_lines.append(f"💰 จำนวนหุ้น: {pos['shares']:,} หุ้น\n")
                 detail_lines.append(f"เงินลงทุน: ${pos['investment']:,.2f}\n")
-                detail_lines.append(f"ขาดทุนสูงสุด: ${pos['risk_amount']:,.2f} ({RISK_PER_TRADE:.1f}%)\n\n")
+                detail_lines.append(f"ขาดทุนสูงสุด: ${pos['risk_amount']:,.2f} ({RISK_PER_TRADE:.1f}%)\n")
+                detail_lines.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n")
             elif not pos["valid"]:
                 detail_lines.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n")
-                detail_lines.append(f"⚠️ ไม่แนะนำ: {pos.get('reason', 'Unknown')}\n\n")
+                detail_lines.append(f"⚠️ ไม่แนะนำ: {pos.get('reason', 'Unknown')}\n")
+                detail_lines.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n")
 
         detail_text = "".join(detail_lines)
 
