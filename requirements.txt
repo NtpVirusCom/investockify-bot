@@ -14,3 +14,4 @@ mplfinance==0.12.10b0
 uvicorn==0.47.0
 fastapi==0.136.1
 deep-translator==1.11.4
+feedparser==6.0.12
