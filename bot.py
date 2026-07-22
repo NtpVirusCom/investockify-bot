@@ -83,7 +83,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 TIMEFRAME = os.environ.get("TIMEFRAME", "1d")
 PORTFOLIO_VALUE = float(os.environ.get("PORTFOLIO_VALUE", "100000"))
 RISK_PER_TRADE = float(os.environ.get("RISK_PER_TRADE", "1.0"))
-VERSION = "2.4.0"
+VERSION = "2.4.5"
 
 BOT_MODE = os.environ.get("BOT_MODE", "polling").lower()
 PORT = int(os.environ.get("PORT", "8080"))
